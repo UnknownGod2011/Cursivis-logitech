@@ -1,0 +1,33 @@
+{
+  "backgroundColor": 4281732918,
+  "items": [
+    {
+      "text": "HOLD",
+      "textColor": 4294967295,
+      "fontSize": 18,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 10,
+        "y": 16,
+        "width": 80,
+        "height": 24
+      }
+    },
+    {
+      "text": "Voice Command",
+      "textColor": 4292072403,
+      "fontSize": 6,
+      "fontName": "Brown Logitech Pan Light",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 6,
+        "y": 70,
+        "width": 88,
+        "height": 14
+      }
+    }
+  ]
+}

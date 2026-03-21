@@ -1,0 +1,428 @@
+<Window x:Class="Cursivis.Companion.Views.OrbOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Height="320"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Width="320"
+        WindowStyle="None"
+        Loaded="Window_OnLoaded">
+    <Grid>
+        <Canvas Width="320" Height="320">
+            <Border x:Name="ActionChipTop"
+                    Width="94"
+                    Height="32"
+                    CornerRadius="16"
+                    Canvas.Left="113"
+                    Canvas.Top="40"
+                    Background="#BA111C27"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10"
+                                      ShadowDepth="0"
+                                      Color="#8048B8FF"
+                                      Opacity="0.45" />
+                </Border.Effect>
+                <TextBlock x:Name="ActionTopText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="10"
+                           FontFamily="Bahnschrift SemiBold"
+                           Text="Summarize" />
+            </Border>
+
+            <Border x:Name="ActionChipUpperRight"
+                    Width="94"
+                    Height="32"
+                    CornerRadius="16"
+                    Canvas.Left="220"
+                    Canvas.Top="104"
+                    Background="#BA111C27"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10"
+                                      ShadowDepth="0"
+                                      Color="#80F562E7"
+                                      Opacity="0.35" />
+                </Border.Effect>
+                <TextBlock x:Name="ActionUpperRightText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="10"
+                           FontFamily="Bahnschrift SemiBold"
+                           Text="Rewrite" />
+            </Border>
+
+            <Border x:Name="ActionChipLowerRight"
+                    Width="94"
+                    Height="32"
+                    CornerRadius="16"
+                    Canvas.Left="220"
+                    Canvas.Top="184"
+                    Background="#BA111C27"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10"
+                                      ShadowDepth="0"
+                                      Color="#805EEBFF"
+                                      Opacity="0.35" />
+                </Border.Effect>
+                <TextBlock x:Name="ActionLowerRightText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="10"
+                           FontFamily="Bahnschrift SemiBold"
+                           Text="Translate" />
+            </Border>
+
+            <Border x:Name="ActionChipLowerLeft"
+                    Width="94"
+                    Height="32"
+                    CornerRadius="16"
+                    Canvas.Left="6"
+                    Canvas.Top="184"
+                    Background="#BA111C27"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10"
+                                      ShadowDepth="0"
+                                      Color="#80F4D06F"
+                                      Opacity="0.30" />
+                </Border.Effect>
+                <TextBlock x:Name="ActionLowerLeftText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="10"
+                           FontFamily="Bahnschrift SemiBold"
+                           Text="Explain" />
+            </Border>
+
+            <Border x:Name="ActionChipUpperLeft"
+                    Width="94"
+                    Height="32"
+                    CornerRadius="16"
+                    Canvas.Left="6"
+                    Canvas.Top="104"
+                    Background="#BA111C27"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="1"
+                    MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10"
+                                      ShadowDepth="0"
+                                      Color="#805EEBFF"
+                                      Opacity="0.35" />
+                </Border.Effect>
+                <TextBlock x:Name="ActionUpperLeftText"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="10"
+                           FontFamily="Bahnschrift SemiBold"
+                           Text="Bullet Points" />
+            </Border>
+
+            <Grid Width="176"
+                  Height="176"
+                  Canvas.Left="72"
+                  Canvas.Top="72">
+                <Canvas Width="176" Height="176" IsHitTestVisible="False">
+                    <Ellipse x:Name="MagicRing1"
+                             Width="140"
+                             Height="140"
+                             Canvas.Left="18"
+                             Canvas.Top="18"
+                             Stroke="#00F562E7"
+                             StrokeThickness="2"
+                             Opacity="0" />
+                    <Ellipse x:Name="MagicRing2"
+                             Width="150"
+                             Height="150"
+                             Canvas.Left="13"
+                             Canvas.Top="13"
+                             Stroke="#005EEBFF"
+                             StrokeThickness="2"
+                             Opacity="0" />
+                    <Ellipse x:Name="MagicRing3"
+                             Width="160"
+                             Height="160"
+                             Canvas.Left="8"
+                             Canvas.Top="8"
+                             Stroke="#00F9CE73"
+                             StrokeThickness="2"
+                             Opacity="0" />
+                    <Ellipse x:Name="MagicRing4"
+                             Width="170"
+                             Height="170"
+                             Canvas.Left="3"
+                             Canvas.Top="3"
+                             Stroke="#00F562E7"
+                             StrokeThickness="1.4"
+                             Opacity="0" />
+                </Canvas>
+
+                <Ellipse x:Name="IdleGlowHalo"
+                         Width="126"
+                         Height="126"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Opacity="1"
+                         IsHitTestVisible="False">
+                    <Ellipse.Fill>#01000000</Ellipse.Fill>
+                    <Ellipse.Effect>
+                        <DropShadowEffect BlurRadius="20"
+                                          ShadowDepth="0"
+                                          Color="#7BCBF7FF"
+                                          Opacity="0.45" />
+                    </Ellipse.Effect>
+                </Ellipse>
+
+                <Ellipse x:Name="VoiceGlowHalo"
+                         Width="186"
+                         Height="186"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Opacity="0"
+                         IsHitTestVisible="False">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush Center="0.5,0.5"
+                                             GradientOrigin="0.5,0.5"
+                                             RadiusX="0.5"
+                                             RadiusY="0.5">
+                            <GradientStop Color="#D0F562E7" Offset="0.02" />
+                            <GradientStop Color="#985EEBFF" Offset="0.34" />
+                            <GradientStop Color="#365EEBFF" Offset="0.68" />
+                            <GradientStop Color="#003B5A64" Offset="1" />
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="VoiceGlowScaleTransform" ScaleX="1" ScaleY="1" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+
+                <Ellipse x:Name="GlowHalo"
+                         Width="166"
+                         Height="166"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Opacity="0.9"
+                         Visibility="Collapsed">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush Center="0.5,0.5"
+                                             GradientOrigin="0.5,0.5"
+                                             RadiusX="0.5"
+                                             RadiusY="0.5">
+                            <GradientStop Color="#82F562E7" Offset="0.06" />
+                            <GradientStop Color="#575EEBFF" Offset="0.40" />
+                            <GradientStop Color="#045E88A8" Offset="0.86" />
+                            <GradientStop Color="#003B5A64" Offset="1" />
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                    <Ellipse.RenderTransform>
+                        <ScaleTransform x:Name="GlowScaleTransform" ScaleX="1" ScaleY="1" />
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+
+                <Canvas x:Name="OrbitRingCanvas"
+                        Width="176" Height="176"
+                        IsHitTestVisible="False"
+                        RenderTransformOrigin="0.5,0.5">
+                    <Canvas.RenderTransform>
+                        <RotateTransform x:Name="OrbitRotateTransform" Angle="0" />
+                    </Canvas.RenderTransform>
+
+                    <Ellipse Width="144"
+                             Height="144"
+                             Canvas.Left="16"
+                             Canvas.Top="16"
+                             Stroke="#45FFFFFF"
+                             StrokeThickness="1.2"
+                             StrokeDashArray="2 7" />
+                    <Ellipse Width="160"
+                             Height="160"
+                             Canvas.Left="8"
+                             Canvas.Top="8"
+                             Stroke="#5567DFFF"
+                             StrokeThickness="1"
+                             StrokeDashArray="1.5 9" />
+                </Canvas>
+
+                <Border x:Name="OrbCore"
+                        Width="118"
+                        Height="118"
+                        Background="#DD141B23"
+                        BorderBrush="#88FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="59"
+                        Cursor="SizeAll"
+                        MouseLeftButtonDown="OrbCore_OnMouseLeftButtonDown"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="22"
+                                          ShadowDepth="0"
+                                          Color="#CC08131F"
+                                          Opacity="0.82" />
+                    </Border.Effect>
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="OrbScaleTransform" ScaleX="0.88" ScaleY="0.88" />
+                    </Border.RenderTransform>
+                    <Grid>
+                        <Ellipse Margin="6"
+                                 Stroke="#25FFFFFF"
+                                 StrokeThickness="1">
+                            <Ellipse.Fill>
+                                <RadialGradientBrush GradientOrigin="0.3,0.25">
+                                    <GradientStop Color="#FF172636" Offset="0" />
+                                    <GradientStop Color="#FF101B28" Offset="0.58" />
+                                    <GradientStop Color="#FF0B131E" Offset="1" />
+                                </RadialGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+
+                        <Grid x:Name="ExpandedStatePanel"
+                              Margin="10,12,10,10"
+                              Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    MinWidth="64"
+                                    Height="19"
+                                    Margin="0,0,0,8"
+                                    Padding="12,0"
+                                    HorizontalAlignment="Center"
+                                    CornerRadius="10"
+                                    Background="#66151E29"
+                                    BorderBrush="#2DFFFFFF"
+                                    BorderThickness="1">
+                                <TextBlock x:Name="StateText"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           FontSize="10.2"
+                                           Text="Idle" />
+                            </Border>
+
+                            <TextBlock Grid.Row="1"
+                                       x:Name="StatusText"
+                                       Margin="6,0,6,0"
+                                       MaxWidth="84"
+                                       VerticalAlignment="Center"
+                                       Foreground="#FFFFFFFF"
+                                       FontSize="10"
+                                       FontFamily="Bahnschrift SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Text="Ready"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Row="2"
+                                       Margin="0,8,0,0"
+                                       HorizontalAlignment="Center"
+                                       Foreground="#7FD7EFFF"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="9"
+                                       Text="CURSIVIS" />
+                        </Grid>
+
+                        <Grid x:Name="CompactIdlePanel"
+                              Margin="10"
+                              Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Center"
+                                            Margin="0,0,0,18">
+                                    <Button Width="10"
+                                            Height="10"
+                                            Margin="0,0,4,0"
+                                            Padding="0"
+                                            Background="#00111B27"
+                                            BorderBrush="#00FFFFFF"
+                                            Foreground="#87E4F3FF"
+                                            FontSize="8"
+                                            Content="&lt;"
+                                            Click="ModePrevButton_OnClick" />
+                                    <TextBlock x:Name="ModeText"
+                                               VerticalAlignment="Center"
+                                               Foreground="#FFF5FBFF"
+                                               FontFamily="Bahnschrift SemiBold"
+                                               FontSize="10"
+                                               Text="Smart" />
+                                    <Button Width="10"
+                                            Height="10"
+                                            Margin="4,0,0,0"
+                                            Padding="0"
+                                            Background="#00111B27"
+                                            BorderBrush="#00FFFFFF"
+                                            Foreground="#87E4F3FF"
+                                            FontSize="8"
+                                            Content="&gt;"
+                                            Click="ModeNextButton_OnClick" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Center">
+                                    <Button Width="10"
+                                            Height="10"
+                                            Margin="0,0,4,0"
+                                            Padding="0"
+                                            VerticalAlignment="Center"
+                                            Background="#00111B27"
+                                            BorderBrush="#00FFFFFF"
+                                            Foreground="#A4D9FF"
+                                            FontSize="8"
+                                            Content="&lt;"
+                                            Click="CommandPrevButton_OnClick" />
+                                    <Button x:Name="IdleRunButton"
+                                            Width="46"
+                                            Height="18"
+                                            HorizontalAlignment="Center"
+                                            Padding="0"
+                                            Background="#8814222F"
+                                            BorderBrush="#4CC4E6FF"
+                                            BorderThickness="1"
+                                            Foreground="White"
+                                            FontFamily="Bahnschrift SemiBold"
+                                            FontSize="8.5"
+                                            Content="Trigger"
+                                            Click="IdleRunButton_OnClick" />
+                                    <Button Width="10"
+                                            Height="10"
+                                            Margin="4,0,0,0"
+                                            Padding="0"
+                                            VerticalAlignment="Center"
+                                            Background="#00111B27"
+                                            BorderBrush="#00FFFFFF"
+                                            Foreground="#A4D9FF"
+                                            FontSize="8"
+                                            Content="&gt;"
+                                            Click="CommandNextButton_OnClick" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Canvas>
+    </Grid>
+</Window>

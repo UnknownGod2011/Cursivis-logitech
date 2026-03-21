@@ -1,0 +1,33 @@
+{
+  "backgroundColor": 4280098071,
+  "items": [
+    {
+      "text": "DIAL",
+      "textColor": 4294967295,
+      "fontSize": 20,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 10,
+        "y": 16,
+        "width": 80,
+        "height": 24
+      }
+    },
+    {
+      "text": "Action Ring",
+      "textColor": 4292072403,
+      "fontSize": 6,
+      "fontName": "Brown Logitech Pan Light",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 70,
+        "width": 84,
+        "height": 14
+      }
+    }
+  ]
+}

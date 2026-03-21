@@ -1,0 +1,33 @@
+{
+  "backgroundColor": 4279507000,
+  "items": [
+    {
+      "text": "GO",
+      "textColor": 4289784063,
+      "fontSize": 24,
+      "fontName": "Brown Logitech Pan Bold",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 18,
+        "y": 14,
+        "width": 64,
+        "height": 28
+      }
+    },
+    {
+      "text": "Trigger",
+      "textColor": 4294967295,
+      "fontSize": 6,
+      "fontName": "Brown Logitech Pan Light",
+      "isVisible": true,
+      "itemType": "Text",
+      "area": {
+        "x": 8,
+        "y": 70,
+        "width": 84,
+        "height": 14
+      }
+    }
+  ]
+}
