@@ -1,17 +1,17 @@
 # Cursivis Architecture Plan
 
-## 1. Objectives
+## 1. Objective
 
-Cursivis must deliver a live, runnable Windows demo where Logitech-triggered intent drives AI actions on current on-screen context.
+Cursivis must deliver a premium, Logitech-native workflow layer where **MX Creative Console**, **MX Master 4**, and **Actions Ring** become the control surface for context-aware AI actions.
 
-Primary competitions:
+Primary competition target:
 
-- Logitech DevStudio 2026
-- Gemini Live Agent Challenge (UI Navigator)
+- **DevStudio 2026 by Logitech**
+- Category: **MX Creative Console + MX Master 4 & Actions Ring**
 
 Primary demo KPI:
 
-- End-to-end action completes in under 3 seconds for short text on normal network.
+- short-context interactions should feel immediate, clear, and hardware-native
 
 ## 2. System Components
 
@@ -19,186 +19,134 @@ Primary demo KPI:
 
 - Runtime: C# + Logi Actions SDK
 - Role:
-- Receive trigger actions (`tap`, `long_press`, optional `dial_press`)
-- Forward trigger event to companion app over local IPC
-- Optional haptic events for success/failure
+  - receive trigger actions
+  - receive dial / ring style control input
+  - forward commands to the companion over local IPC
+  - emit haptic feedback events
 
 ### B. Companion App (`desktop/cursivis-companion`)
 
 - Runtime: C# + WPF
 - Role:
-- Detect selection context (text first, lasso second, pixel fallback)
-- Render orb/status overlay near cursor
-- Execute Smart/Guided interaction flow
-- Handle clipboard operations
-- Manage onboarding/settings/intent memory
-- Call backend and render response UI
+  - capture current context from the active workflow
+  - render orb and result UI
+  - orchestrate Smart / Guided / Talk / Snip-it / Action flows
+  - manage clipboard, selection, image, and voice interactions
+  - execute browser-integrated actions
 
-### C. Gemini Agent Backend (`backend/gemini-agent`)
+### C. AI Backend (`backend/gemini-agent`)
 
-- Runtime: Node.js (Express) for fast hackathon iteration
+- Runtime: Node.js
 - Role:
-- Analyze text/image/voice transcript
-- Infer likely intent
-- Return action + result + confidence + alternatives
-- Provide strict JSON response contract for companion app
+  - analyze text, image, and voice-enhanced requests
+  - infer the most useful action in Smart mode
+  - generate ranked actions in Guided mode
+  - return result text plus structured browser action plans
 
-### D. Shared Contracts (`shared/ipc-protocol`)
+### D. Browser Action Layer
 
-- JSON schema definitions for:
-- Trigger events
-- Agent requests
-- Agent responses
-- Intent memory record model
+- `desktop/browser-action-agent`
+- `desktop/browser-extension-chromium`
+- `desktop/browser-native-host`
 
-## 3. Data and Control Flow
+Role:
 
-## 3.1 Minimal Vertical Slice (MVP-1)
+- inspect browser context
+- execute safe structured actions
+- act in the current real browser tab when available
+- fall back to managed-browser automation when needed
 
-1. User highlights text in any app.
-2. User presses mock `MX Trigger` button (later Logitech hardware trigger).
-3. Companion app:
-- captures selected text
-- shows orb: `Analyzing selection...`
-4. Companion sends request to backend `/api/intent`.
-5. Backend runs Gemini summarize action and returns structured JSON.
-6. Companion copies `result` to clipboard.
-7. Orb shows success; expand panel displays full output.
+### E. Shared Contracts (`shared/ipc-protocol`)
 
-## 3.2 Full Selection Decision Tree
+- trigger events
+- agent requests
+- agent responses
+- browser action plans
+- haptic metadata
 
-1. Trigger received.
-2. Attempt text selection capture.
-3. If text exists:
-- Smart mode: auto action + execute
-- Guided mode: show dynamic action menu
-4. If no text:
-- Enter lasso mode and capture region
-5. If no lasso region:
-- Sample cursor pixel and copy hex color
+## 3. Core Experience
 
-## 4. IPC Design
+### 3.1 Smart Mode
 
-## 4.1 Initial Choice
+1. User selects current context
+2. User triggers from orb or Logitech hardware
+3. Companion captures the active selection
+4. AI backend decides the most useful action
+5. Cursivis returns the result
+6. User can optionally press `Take Action`
 
-- Local WebSocket for hackathon speed and easier inspection.
-- Endpoint (companion host): `ws://127.0.0.1:48711/cursivis-trigger`
+### 3.2 Guided Mode
 
-Rationale:
+1. User selects current context
+2. User presses `Trigger`
+3. Orb shows relevant predefined options
+4. Orb expands with dynamic context-aware options
+5. Custom remains available at all times
+6. User chooses one path and gets the result
 
-- Works for mock UI and plugin with same message format
-- Easy to debug with JSON payloads
-- Low effort to add event tracing
+### 3.3 Talk Mode
 
-## 4.2 Future Alternative
+1. User selects context
+2. User holds `Talk`
+3. Voice is captured and transcribed
+4. Spoken instruction is combined with the current selection
+5. Cursivis runs the refined request
 
-- Named Pipe transport adapter can be added later without changing payload schema.
+### 3.4 Take Action
 
-## 5. Mode Model
+1. User reviews the generated result
+2. User presses `Take Action`
+3. Backend turns the result into a structured browser plan
+4. Current-tab execution is attempted first
+5. Managed fallback is used when necessary
 
-- `smart`: backend chooses best action automatically
-- `guided`: companion asks backend for ranked suggestions; user picks action
+## 4. Selection Model
 
-Mode persisted locally in companion settings file.
+Cursivis supports:
 
-## 6. Intent Memory Model
+- text
+- image
+- text + image
+- text + voice
+- image + voice
+- text + image + voice when useful
 
-Local file storage in companion app:
+This is important because the interaction model is not “open chat, then explain.” It is “capture what is already on screen and act on it.”
 
-- `data/intent-memory.json`
+## 5. Logitech Interaction Model
 
-Keyed by:
+The long-term hardware mapping is:
 
-- content kind (`text`, `code`, `image`, `product`, etc.)
-- chosen action (`summarize`, `translate`, `explain`, ...)
+- `Trigger` = run Smart or Guided action
+- `Talk` = hold-to-talk refinement
+- `Snip-it` = image or region selection
+- `Action` = execute result in the active workflow
+- dial / ring = navigate options, adjust focus, confirm intent
 
-Used for:
+This is what makes Cursivis feel like a true Logitech-native product instead of a generic assistant.
 
-- reordering guided suggestions
-- optional smart-mode tie-breaker hints
+## 6. Reliability Priorities
 
-## 7. Security and Reliability
+- always use the latest active selection
+- keep Smart Mode decision-making flexible and context-aware
+- keep Guided Mode relevant to the current selection
+- preserve browser action safety and reversibility where possible
+- keep the orb and result UI minimal and fast
 
-- Backend API key never hardcoded in companion; only backend holds Gemini key.
-- Companion calls backend with local config URL + auth token support.
-- Strict schema validation on backend input/output.
-- Timeouts:
-- IPC trigger handling timeout: 250 ms
-- Backend request timeout: 12 s
-- Graceful UI fallback states for failures.
+## 7. Local Runtime Topology
 
-## 8. Observability
+- Logitech plugin or bridge sends trigger events
+- companion captures context and orchestrates UI
+- backend returns analysis and plans
+- browser layer executes real web actions
 
-- Companion logs:
-- trigger received
-- selection detection result
-- backend latency
-- clipboard write result
-- Backend logs:
-- request id
-- selected action
-- model latency
-- model/provider errors
+## 8. Definition Of Done
 
-All logs include `requestId` correlation key.
+Cursivis is considered competition-ready when:
 
-## 9. Build and Run Topology
-
-Local demo topology:
-
-- Companion app (WPF) runs on Windows desktop.
-- Mock trigger button window sends trigger events over local WebSocket.
-- Backend service runs locally (dev) or on Cloud Run (demo/stage/prod).
-
-Competition demo topology:
-
-- Logitech plugin replaces mock trigger sender.
-- Backend deployed to Google Cloud Run.
-
-## 10. Implementation Phases
-
-## Phase 1 (Now): Scaffold + Contracts
-
-- Folder structure
-- Architecture plan
-- IPC schemas
-
-## Phase 2: Companion MVP
-
-- Mock trigger button
-- Text capture flow
-- Orb + result panel
-- Clipboard integration
-
-## Phase 3: Backend MVP
-
-- `/health` and `/api/intent`
-- Gemini text summarize action
-- Structured response with confidence + alternatives
-
-## Phase 4: Plugin Integration
-
-- Logitech trigger action maps to IPC trigger event
-- Optional haptic success/failure
-
-## Phase 5: Multimodal Expansion
-
-- Lasso capture and image analysis
-- Long-press voice command mode
-
-## Phase 6: Memory + Polish
-
-- Intent memory ranking
-- Guided dynamic menu expansion
-- Resilience and UX polish
-
-## 11. Definition of Done for MVP-1
-
-MVP-1 is accepted when all are true:
-
-- Triggering produces visible orb state changes
-- Selected text is detected from at least one external app (Notepad/Chrome)
-- Backend returns real Gemini-generated summary
-- Result is copied to clipboard automatically
-- Expand panel shows full result text
-- No mocked AI output in the success path
+- Smart Mode reliably chooses useful actions from live context
+- Guided Mode offers relevant options around the orb
+- voice commands combine correctly with the current selection
+- image selection reflects the correct on-screen region
+- `Take Action` works reliably on live browser workflows
+- Logitech plugin integration feels native and polished

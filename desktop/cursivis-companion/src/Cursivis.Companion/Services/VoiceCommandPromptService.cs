@@ -63,38 +63,46 @@ public sealed class VoiceCommandPromptService
                     session.Start();
 
                     var startedAt = DateTime.UtcNow;
+                    var processingMessage = "Processing voice...";
                     while (!cancellationToken.IsCancellationRequested)
                     {
                         if (DateTime.UtcNow - startedAt >= _maxVoiceDuration)
                         {
-                            Report(Models.OrbState.Processing, "Voice hold limit reached. Processing...");
+                            processingMessage = "Voice hold limit reached. Processing...";
                             break;
                         }
 
                         if (!session.HasDetectedSpeech &&
                             DateTime.UtcNow - startedAt >= _initialSpeechTimeout)
                         {
-                            Report(Models.OrbState.Processing, "No clear speech detected yet. Checking captured audio...");
+                            processingMessage = "No clear speech detected yet. Checking captured audio...";
                             break;
                         }
 
                         if (session.HasDetectedSpeech &&
                             DateTime.UtcNow - session.LastSpeechDetectedUtc >= _autoStopSilenceDuration)
                         {
-                            Report(Models.OrbState.Processing, "Speech pause detected. Processing...");
+                            processingMessage = "Speech pause detected. Processing...";
                             break;
                         }
 
                         await Task.Delay(100, CancellationToken.None);
                     }
 
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        processingMessage = session.HasDetectedSpeech
+                            ? "Stopped listening. Processing..."
+                            : "Stopped listening. Checking captured audio...";
+                    }
+
                     session.InputLevelChanged -= OnInputLevelChanged;
                     session.ChunkAvailable -= OnVoiceChunkAvailable;
-                    Report(Models.OrbState.Processing, "Processing voice...");
+                    ReportInputLevel(0);
+                    Report(Models.OrbState.Processing, processingMessage);
                     await session.StopAsync();
                     await liveClient.CompleteAudioAsync(CancellationToken.None);
                     finalTranscript = await liveClient.WaitForFinalTranscriptAsync(TimeSpan.FromSeconds(4), CancellationToken.None);
-                    ReportInputLevel(0);
 
                     if (!string.IsNullOrWhiteSpace(finalTranscript) || !string.IsNullOrWhiteSpace(partialTranscript))
                     {
@@ -139,25 +147,27 @@ public sealed class VoiceCommandPromptService
 
                 var startedAt = DateTime.UtcNow;
                 var lastProbeAt = DateTime.MinValue;
+                var processingMessage = "Transcribing voice...";
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     if (DateTime.UtcNow - startedAt >= _maxVoiceDuration)
                     {
+                        processingMessage = "Voice hold limit reached. Transcribing...";
                         break;
                     }
 
                     if (!session.HasDetectedSpeech &&
                         DateTime.UtcNow - startedAt >= _initialSpeechTimeout)
                     {
-                        Report(Models.OrbState.Processing, "No clear speech detected yet. Checking captured audio...");
+                        processingMessage = "No clear speech detected yet. Checking captured audio...";
                         break;
                     }
 
                     if (session.HasDetectedSpeech &&
                         DateTime.UtcNow - session.LastSpeechDetectedUtc >= _autoStopSilenceDuration)
                     {
-                        Report(Models.OrbState.Processing, "Speech pause detected. Processing...");
+                        processingMessage = "Speech pause detected. Transcribing...";
                         break;
                     }
 
@@ -193,14 +203,21 @@ public sealed class VoiceCommandPromptService
                     }
                 }
 
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    processingMessage = session.HasDetectedSpeech
+                        ? "Stopped listening. Transcribing..."
+                        : "Stopped listening. Checking captured audio...";
+                }
+
                 session.InputLevelChanged -= OnInputLevelChanged;
                 var captured = await session.StopAsync();
                 ReportInputLevel(0);
                 if (captured is not null)
                 {
                     try
-                        {
-                        Report(Models.OrbState.Processing, "Transcribing voice...");
+                    {
+                        Report(Models.OrbState.Processing, processingMessage);
                         finalTranscript = await TranscribeBufferedAudioAsync(captured);
                     }
                     catch

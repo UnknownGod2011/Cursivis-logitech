@@ -1,42 +1,52 @@
 # Cursivis
 
-Windows-first cursor-native AI interaction system for Logitech + Gemini.
+Logitech-first cursor-native AI workflow layer for **MX Creative Console**, **MX Master 4**, and **Actions Ring**.
 
-This repository is organized for parallel development of:
+Cursivis turns on-screen context into direct action:
 
-- Logitech trigger integration (`plugin/logitech-plugin`)
-- Windows companion app (`desktop/cursivis-companion`)
-- Local browser action executor (`desktop/browser-action-agent`)
-- Gemini backend service (`backend/gemini-agent`)
-- Shared cross-component contracts (`shared/ipc-protocol`)
+- select text, an image region, or a live browser task
+- trigger from the orb today and Logitech hardware next
+- get the most useful response for that context
+- optionally execute the result directly in the current browser workflow
+
+This repository is now centered on the **DevStudio 2026 by Logitech Challenge**, specifically the **MX Creative Console + MX Master 4 & Actions Ring** track.
+
+## What Cursivis Is
+
+Cursivis is a Windows-first interaction system built around a simple idea:
+
+> **Selection = Context, Trigger = Intent, Cursivis = Action**
+
+Instead of opening a chatbot and manually re-explaining context, the user stays in flow. The selected content, the active app, the trigger type, and optional voice instruction all combine into one interaction layer that feels native to Logitech’s control surfaces.
+
+## Current Product Direction
+
+Cursivis is being shaped as a Logitech-native productivity plugin and companion for:
+
+- MX Creative Console
+- MX Master 4 + Actions Ring
+- browser-first workflows
+- voice-assisted prompt refinement
+- guided and smart control paths
+
+The project is now being refined specifically as a premium Logitech ecosystem experience.
 
 ## Current Status
 
-Companion + backend + trigger bridge are implemented for a runnable functional demo:
+The current local demo already supports:
 
-- Mock console trigger panel in WPF
-- External trigger IPC over local WebSocket
-- Text selection capture, lasso screenshot capture, pixel HEX fallback
-- Smart/Guided modes with first-run mode selection and persisted preference
-- Gemini-backed text/image analysis with Gemini-first intent routing
-- Text selections can optionally include a captured visual screen context, enabling combined text + image reasoning
-- Guided mode progressive menu (`...`) with dynamic context options + custom voice
-- Long-press hold-to-record voice capture + backend transcription pipeline
-- Optional Gemini Live API realtime voice path with interruption-friendly transcription fallback
-- Optional streaming-style partial transcription during long capture (`CURSIVIS_ENABLE_STREAMING_TRANSCRIPTION=true`)
-- Hybrid output behavior: always copies to clipboard; Smart mode can also auto-replace selected text for safe action types at high confidence
-- Post-result `Take Action` flow for browser-first agent execution (fill forms, check MCQs, draft/send email flows, apply generated output to live pages)
-- Chromium extension + native messaging host path for acting inside the user's real logged-in current browser tab instead of only the managed automation browser
-- Action preview + one-click undo for auto-replace and browser execution flows
-- Browser task-pack guidance for Gmail/mail, Discord, Google Forms, Docs, Notion, and shopping pages
-- Clipboard auto-copy + insert + result panel
-- Dial-driven action ring
-- Intent memory ranking for repeated action choices
-- Logitech trigger paths:
-- `plugin/logitech-plugin/src/Cursivis.Logitech.Bridge` (runnable bridge)
-- `plugin/logitech-plugin/src/CursivisPlugin` (Logi SDK plugin scaffold)
+- Windows companion app with orb + result UI
+- Smart and Guided modes
+- text selection capture
+- lasso image selection and text+image reasoning
+- hold-to-talk voice capture and transcription
+- result panel with insert / more options / take action
+- browser-first `Take Action` execution for forms, MCQs, email, and live web tasks
+- Chromium extension + native host path for acting in the user’s real logged-in tab
+- Logitech plugin workstream under `plugin/logitech-plugin`
+- haptics / trigger IPC / dial-oriented interaction model
 
-## Folder Layout
+## Repository Layout
 
 ```text
 cursivis/
@@ -56,6 +66,7 @@ cursivis/
 ## Quick Start
 
 1. Set `GOOGLE_API_KEY` in your terminal environment.
+   The current backend implementation uses Google’s API today, but the product positioning and long-term workflow are Logitech-first.
 2. Run:
 
 ```powershell
@@ -63,59 +74,29 @@ Set-Location -LiteralPath "C:\Users\Admin\OneDrive\Desktop\Cursivis! - Copy\curs
 powershell -ExecutionPolicy Bypass -File .\scripts\run-demo.ps1 -WithBridge -ApiKey "<YOUR_GOOGLE_API_KEY>" -EnableStreamingTranscription
 ```
 
-`run-demo.ps1` now performs pre-launch cleanup by default, starts backend + browser action agent + companion (+ optional bridge), checks health, and warms the managed browser session used by `Take Action`.
+`run-demo.ps1` starts:
 
-To enable `Take Action` inside your real logged-in Chromium-family browser tabs:
+- AI backend
+- browser action agent
+- browser extension bridge host
+- WPF companion app
+- optional Logitech bridge when `-WithBridge` is used
 
-1. Load or reload the unpacked extension from [desktop/browser-extension-chromium/README.md](desktop/browser-extension-chromium/README.md).
-2. Refresh the target Gmail / Google Form / web app tab once after the extension loads.
-3. Keep the target tab active when you use `Take Action`.
+To enable `Take Action` in a real logged-in Chromium tab:
 
-Optional companion env flags:
-
-- `CURSIVIS_ENABLE_STREAMING_TRANSCRIPTION=true`
-- `CURSIVIS_ENABLE_TEXT_SCREEN_CONTEXT=true`
-- `CURSIVIS_TEXT_SCREEN_CONTEXT_WIDTH=480`
-- `CURSIVIS_TEXT_SCREEN_CONTEXT_HEIGHT=320`
-- `CURSIVIS_MAX_VOICE_SECONDS=45`
-- `CURSIVIS_STREAM_PROBE_SECONDS=2`
-- `CURSIVIS_VOICE_CONFIRM=false`
-- `CURSIVIS_ENABLE_AUTO_REPLACE=true`
-- `CURSIVIS_AUTO_REPLACE_CONFIDENCE=0.90`
-- `CURSIVIS_ENABLE_AUTO_TAKE_ACTION=true`
-- `CURSIVIS_ENABLE_VOICE_ACTION_HANDOFF=true`
-- `CURSIVIS_ENABLE_LIVE_API_VOICE=true`
-- `CURSIVIS_EXTENSION_BRIDGE_URL=http://127.0.0.1:48830`
-
-Stop all demo components:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\stop-demo.ps1
-```
-
-Quick backend smoke test:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 -ApiKey "<YOUR_GOOGLE_API_KEY>"
-```
+1. Load or reload the unpacked extension from `desktop/browser-extension-chromium/README.md`
+2. Refresh the target tab once
+3. Keep that tab active when you use `Take Action`
 
 ## Reproducible Testing
-
-These instructions are written for judges so the project can be reproduced and tested quickly.
 
 ### Prerequisites
 
 - Windows 10 or 11
 - .NET 8 SDK
 - Node.js 20+
-- Google Gemini API key
-- Chrome, Edge, Brave, or another Chromium-family browser for real-tab `Take Action`
-
-### One-Time Setup
-
-1. Clone the repo.
-2. Open a PowerShell terminal in the repo root.
-3. Load the unpacked browser extension from [desktop/browser-extension-chromium/README.md](desktop/browser-extension-chromium/README.md) if you want `Take Action` to run inside your already logged-in browser tab.
+- API key for the current backend implementation
+- Chrome, Edge, Brave, or another Chromium-family browser
 
 ### Start The Full Local Demo
 
@@ -124,56 +105,59 @@ Set-Location -LiteralPath "C:\Users\Admin\OneDrive\Desktop\Cursivis! - Copy\curs
 powershell -ExecutionPolicy Bypass -File .\scripts\run-demo.ps1 -WithBridge -ApiKey "<YOUR_GOOGLE_API_KEY>" -EnableStreamingTranscription
 ```
 
-What this launches:
-
-- Gemini backend
-- browser action agent
-- browser extension bridge host
-- WPF companion app
-- optional Logitech bridge when `-WithBridge` is used
-
-### Fast Health / Smoke Test
+### Fast Smoke Test
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\smoke-test.ps1 -ApiKey "<YOUR_GOOGLE_API_KEY>"
 ```
 
-### Manual Judge Test Flows
+### Manual Test Flows
 
 1. Smart text flow
-   - Select a long article or report and press `Trigger`.
-   - Expected: Cursivis returns a useful summary or insight-oriented response.
-2. Image flow
-   - Use lasso selection on an image and press `Trigger`.
-   - Expected: Cursivis describes or analyzes the selected image region.
+   - Select a long article, brief, or report and press `Trigger`
+   - Expected: Cursivis chooses a useful action and returns a strong result
+2. Guided flow
+   - Select text in Guided mode and press `Trigger`
+   - Expected: relevant options appear around the orb, including dynamic options and Custom
 3. Voice flow
-   - Hold `Hold to Talk`, speak, then pause for 1-2 seconds.
-   - Expected: the orb glows while listening, voice is transcribed, and the result is generated against the current selection.
-4. Google Form / MCQ flow
-   - Select the questions, press `Trigger`, then press `Take Action`.
-   - Expected: answer choices and text fields are filled in the active logged-in browser tab.
-5. Email reply flow
-   - Select an email thread, press `Trigger`, then press `Take Action`.
-   - Expected: a reply draft is inserted into the active mail composer.
+   - Select text, hold `Talk`, speak, then pause
+   - Expected: voice is transcribed and combined with the current selection
+4. Image flow
+   - Trigger with image selection and analyze a lasso region
+   - Expected: the selected region is interpreted correctly
+5. MCQ / form flow
+   - Select the question set, run `Trigger`, then press `Take Action`
+   - Expected: the live browser form is filled reliably
+6. Email flow
+   - Select an email thread, run `Trigger`, then optionally `Take Action`
+   - Expected: Cursivis drafts or inserts a useful response in the current browser workflow
 
-### Helpful Hotkeys
+## Logitech Focus
 
-- `Ctrl+Alt+Space` = Trigger
-- `Ctrl+Alt+A` = Take Action
-- `Ctrl+Alt+V` = Voice
+The main Logitech workstream is here:
 
-## Architecture Diagram
+- `plugin/logitech-plugin`
 
-- Primary diagram image: [docs/ARCHITECTURE_DIAGRAM_CHATGPT.png](docs/ARCHITECTURE_DIAGRAM_CHATGPT.png)
-- Alternate vector diagram: [docs/ARCHITECTURE_DIAGRAM.svg](docs/ARCHITECTURE_DIAGRAM.svg)
-- Diagram notes: [docs/ARCHITECTURE_DIAGRAM.md](docs/ARCHITECTURE_DIAGRAM.md)
+That area contains:
 
-## Google Cloud Deployment
+- plugin packaging
+- bridge/runtime pieces
+- Logitech-side control map
+- haptic event flow
+- future default profiles for MX Creative Console and Actions Ring
 
-The Gemini backend can be deployed to Google Cloud Run without changing the local working version you use for demos.
+## Architecture
 
-- Deployment guide: [docs/DEPLOYMENT_GCLOUD.md](docs/DEPLOYMENT_GCLOUD.md)
-- Automated deploy script: [scripts/deploy-cloudrun.ps1](scripts/deploy-cloudrun.ps1)
-- Container source: [backend/gemini-agent/Dockerfile](backend/gemini-agent/Dockerfile)
+- Primary diagram: `docs/ARCHITECTURE_DIAGRAM_CHATGPT.png`
+- Vector diagram: `docs/ARCHITECTURE_DIAGRAM.svg`
+- Diagram notes: `docs/ARCHITECTURE_DIAGRAM.md`
+- Architecture plan: `ARCHITECTURE_PLAN.md`
 
-Important: local demos continue using `http://127.0.0.1:8080` by default. The cloud backend is only used when you explicitly launch the companion with `-BackendUrl "<CLOUD_RUN_URL>"`.
+## Optional Cloud Deployment
+
+The backend can still be deployed for remote demos, team sharing, or final-event proof:
+
+- deployment notes: `docs/DEPLOYMENT_GCLOUD.md`
+- deploy script: `scripts/deploy-cloudrun.ps1`
+
+That deployment path is optional and separate from the core Logitech story.

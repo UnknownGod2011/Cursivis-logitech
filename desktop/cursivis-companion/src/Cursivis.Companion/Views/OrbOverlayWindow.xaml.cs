@@ -175,9 +175,9 @@ public partial class OrbOverlayWindow : Window
         }
 
         var clamped = Math.Clamp(level, 0, 1);
-        VoiceGlowHalo.Opacity = 0.10 + (clamped * 0.6);
-        VoiceGlowScaleTransform.ScaleX = 0.96 + (clamped * 0.82);
-        VoiceGlowScaleTransform.ScaleY = 0.96 + (clamped * 0.82);
+        VoiceGlowHalo.Opacity = 0.18 + (clamped * 0.28);
+        VoiceGlowScaleTransform.ScaleX = 0.98 + (clamped * 0.16);
+        VoiceGlowScaleTransform.ScaleY = 0.98 + (clamped * 0.16);
     }
 
     public void UpdateActionRing(IReadOnlyList<string> actions, int selectedIndex)
@@ -370,7 +370,7 @@ public partial class OrbOverlayWindow : Window
         var glowX = new DoubleAnimation
         {
             From = 1.0,
-            To = 1.14,
+            To = isListening ? 1.06 : 1.14,
             Duration = TimeSpan.FromMilliseconds(760),
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever
@@ -378,8 +378,8 @@ public partial class OrbOverlayWindow : Window
         var glowY = glowX.Clone();
         var glowOpacity = new DoubleAnimation
         {
-            From = 0.68,
-            To = 0.98,
+            From = isListening ? 0.42 : 0.68,
+            To = isListening ? 0.62 : 0.98,
             Duration = TimeSpan.FromMilliseconds(760),
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever
@@ -427,8 +427,8 @@ public partial class OrbOverlayWindow : Window
         }
 
         VoiceGlowHalo.Opacity = 0;
-        VoiceGlowScaleTransform.ScaleX = 0.96;
-        VoiceGlowScaleTransform.ScaleY = 0.96;
+        VoiceGlowScaleTransform.ScaleX = 0.98;
+        VoiceGlowScaleTransform.ScaleY = 0.98;
     }
 
     private void UpdatePresentationMode()
@@ -612,7 +612,7 @@ public partial class OrbOverlayWindow : Window
                 break;
             case OrbState.Listening:
                 OrbCore.Background = CreateOrbBrush(ColorFromHex("#331A38"), ColorFromHex("#251629"), ColorFromHex("#140E1A"));
-                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#D4F562E7"), ColorFromHex("#7A5EEBFF"), ColorFromHex("#083E5C7A"));
+                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#5DAAD5F3"), ColorFromHex("#2A78B4D8"), ColorFromHex("#04243A4A"));
                 StateText.Foreground = new SolidColorBrush(ColorFromHex("#FFD6F8"));
                 break;
             case OrbState.Completed:

@@ -1,114 +1,56 @@
-# Gemini Agent Backend
+# Cursivis AI Backend
 
 ## Purpose
 
-Provide structured Gemini-powered reasoning and transformation endpoints for companion requests.
+Provide structured reasoning, transformation, transcription, and browser-planning endpoints for the Logitech-first Cursivis workflow.
 
-## Initial API
+This folder name is still `gemini-agent` because that is the current implementation path, but the product story is broader: this backend is the reasoning layer behind Cursivis, not the headline.
 
-- `GET /health`
-- `POST /api/intent`
+## Current Responsibilities
 
-## Input Types
-
-- selected text
-- screenshot image payload (phase 5)
-- voice transcript (phase 5)
-
-## Response Contract
-
-```json
-{
-  "requestId": "uuid",
-  "action": "summarize",
-  "result": "string",
-  "confidence": 0.91,
-  "alternatives": ["translate", "explain"],
-  "latencyMs": 1240
-}
-```
-
-## Status
-
-Implemented Node/Express backend in `src/`.
+- analyze text, image, and text+image selections
+- process spoken command refinement
+- rank actions for Guided mode
+- choose the most useful action for Smart mode
+- produce structured browser action plans for `Take Action`
 
 ## Endpoints
 
 - `GET /health`
 - `POST /analyze`
-- `POST /api/intent` (alias of `/analyze`)
+- `POST /api/intent`
 - `POST /suggest-actions`
 - `POST /transcribe`
 - `POST /plan-browser-action`
-- `WS /live` (Gemini Live API voice gateway)
+- `WS /live`
 
-`/analyze` supports:
+## Notes
 
-- `selection.kind = "text"` for text analysis/rewrite/translate/explain/bullets
-- `selection.kind = "text_image"` for multimodal text + screenshot reasoning
-- additional structured actions (`explain_code`, `debug_code`, `optimize_code`, `compare_prices`, etc.)
-- `selection.kind = "image"` for lasso screenshot analysis
-- optional `voiceCommand` to apply long-press instruction behavior
-
-`/suggest-actions` returns:
-
-- `contentType`
-- `recommendedAction`
-- `alternatives`
-- `extendedAlternatives` (dynamic, Gemini-generated contextual options for `...` menu)
-- `bestAction` and `confidence`
-
-`/transcribe` accepts recorded audio (`audioBase64`, `mimeType`) and returns transcription text for long-press voice command flow.
-
-`/live` provides a websocket bridge for realtime voice sessions backed by Gemini Live API. The companion can stream microphone chunks and receive incremental transcription / interruption events, while still falling back to `/transcribe` if Live API is unavailable.
-
-`/plan-browser-action` accepts:
-
-- original selected text
-- generated result text
-- executed action + optional voice command
-- browser page context from the local Playwright action agent
-
-and returns a concise executable browser plan (`steps[]`) for the companion to run locally.
-
-Rate-limit/quota hardening:
-
-- `429` responses include `retryAfterSec` for retry UX
-- backend surfaces clear quota/rate messages to companion
+- `/analyze` is the main execution path
+- `/suggest-actions` powers Guided mode
+- `/transcribe` supports hold-to-talk
+- `/plan-browser-action` converts generated results into structured browser steps
 
 ## Local Run
 
 ```powershell
 cd backend/gemini-agent
-copy .env.example .env
-# Set GOOGLE_API_KEY in your env or shell
 npm install
 npm start
 ```
 
-Default port: `8080`
+Default port:
 
-Optional env vars:
+- `8080`
 
-- `GEMINI_MODEL` (default: `gemini-2.5-flash`)
-- `GEMINI_LIVE_MODEL` (default: `gemini-live-2.5-flash-preview`)
-- `GEMINI_ROUTER_MODEL` (intent router model override)
-- `GEMINI_OPTIONS_MODEL` (dynamic options model override)
-- `CURSIVIS_ENABLE_LIVE_GROUNDING` (`true`/`false`, default `true`)
+## Environment
 
-## Tests
+Current implementation env:
 
-```powershell
-cd backend/gemini-agent
-npm test
-```
+- `GOOGLE_API_KEY`
+- `GEMINI_MODEL`
+- `GEMINI_LIVE_MODEL`
+- `GEMINI_ROUTER_MODEL`
+- `GEMINI_OPTIONS_MODEL`
 
-## Docker / Cloud Run
-
-Build from repository root:
-
-```powershell
-docker build -f backend/gemini-agent/Dockerfile -t cursivis-gemini-agent .
-```
-
-Cloud Run guide: [docs/DEPLOYMENT_GCLOUD.md](../../docs/DEPLOYMENT_GCLOUD.md)
+Even though the current backend uses Gemini today, the docs and product framing should be understood as **Cursivis-first and Logitech-first**.

@@ -342,7 +342,7 @@ public sealed class ActiveBrowserAutomationService
         throw new InvalidOperationException($"Could not find field '{label}'.");
     }
 
-    private async Task ToggleChoiceAsync(
+    private async Task<AutomationElement> ToggleChoiceAsync(
         AutomationElement root,
         ControlType controlType,
         string? question,
@@ -378,6 +378,7 @@ public sealed class ActiveBrowserAutomationService
         }
 
         await ActivateElementAsync(match, cancellationToken);
+        return match;
     }
 
     private async Task ApplyAnswerKeyAsync(
@@ -411,17 +412,31 @@ public sealed class ActiveBrowserAutomationService
             }
 
             var appliedThisPage = 0;
-            for (var index = pending.Count - 1; index >= 0; index -= 1)
+            var pagePass = 0;
+            var madeProgress = true;
+            while (pagePass < 3 && madeProgress && pending.Count > 0)
             {
-                var answer = pending[index];
-                if (!await TryToggleAnswerAsync(root, answer, cancellationToken))
+                madeProgress = false;
+                for (var index = pending.Count - 1; index >= 0; index -= 1)
                 {
-                    continue;
+                    var answer = pending[index];
+                    if (!await TryToggleAnswerAsync(root, windowHandle, answer, cancellationToken))
+                    {
+                        continue;
+                    }
+
+                    pending.RemoveAt(index);
+                    applied += 1;
+                    appliedThisPage += 1;
+                    madeProgress = true;
                 }
 
-                pending.RemoveAt(index);
-                applied += 1;
-                appliedThisPage += 1;
+                pagePass += 1;
+                if (madeProgress)
+                {
+                    await Task.Delay(85, cancellationToken);
+                    root = TryGetRoot(windowHandle) ?? root;
+                }
             }
 
             logs.Add($"apply_answer_key:applied={appliedThisPage}");
@@ -449,7 +464,7 @@ public sealed class ActiveBrowserAutomationService
             }
 
             await ActivateElementAsync(nextElement, cancellationToken);
-            await Task.Delay(appliedThisPage > 0 ? 950 : 700, cancellationToken);
+            await Task.Delay(appliedThisPage > 0 ? 820 : 620, cancellationToken);
         }
 
         if (applied == 0)
@@ -465,26 +480,97 @@ public sealed class ActiveBrowserAutomationService
 
     private async Task<bool> TryToggleAnswerAsync(
         AutomationElement root,
+        IntPtr windowHandle,
         BrowserAnswerKeyEntry answer,
         CancellationToken cancellationToken)
     {
+        if (await TryApplyChoiceAsync(root, ControlType.RadioButton, answer.Question, answer.Option, cancellationToken))
+        {
+            return true;
+        }
+
+        if (await TryApplyChoiceAsync(root, ControlType.CheckBox, answer.Question, answer.Option, cancellationToken))
+        {
+            return true;
+        }
+
+        return await TryFillAnswerAsync(root, windowHandle, answer, cancellationToken);
+    }
+
+    private async Task<bool> TryApplyChoiceAsync(
+        AutomationElement root,
+        ControlType controlType,
+        string? question,
+        string? option,
+        CancellationToken cancellationToken)
+    {
+        AutomationElement match;
         try
         {
-            await ToggleChoiceAsync(root, ControlType.RadioButton, answer.Question, answer.Option, cancellationToken);
-            return true;
+            match = await ToggleChoiceAsync(root, controlType, question, option, cancellationToken);
         }
         catch
         {
-            try
+            return false;
+        }
+
+        if (IsChoiceSelected(match))
+        {
+            return true;
+        }
+
+        for (var attempt = 0; attempt < 2; attempt += 1)
+        {
+            await ActivateElementAsync(match, cancellationToken);
+            await Task.Delay(80 + (attempt * 50), cancellationToken);
+            if (IsChoiceSelected(match))
             {
-                await ToggleChoiceAsync(root, ControlType.CheckBox, answer.Question, answer.Option, cancellationToken);
                 return true;
             }
-            catch
+        }
+
+        return IsChoiceSelected(match);
+    }
+
+    private async Task<bool> TryFillAnswerAsync(
+        AutomationElement root,
+        IntPtr windowHandle,
+        BrowserAnswerKeyEntry answer,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(answer.Question) || string.IsNullOrWhiteSpace(answer.Option))
+        {
+            return false;
+        }
+
+        AutomationElement? field = null;
+        foreach (var candidateLabel in ExpandFieldQueries(answer.Question))
+        {
+            field = FindEditableField(root, candidateLabel);
+            if (field is not null)
             {
-                return false;
+                break;
             }
         }
+
+        if (field is null)
+        {
+            return false;
+        }
+
+        if (TrySetValue(field, answer.Option))
+        {
+            await Task.Delay(70, cancellationToken);
+            if (string.Equals(TryReadElementValue(field), Normalize(answer.Option), StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        field.SetFocus();
+        await Task.Delay(35, cancellationToken);
+        await PasteToFocusedElementAsync(windowHandle, answer.Option, overwrite: true, cancellationToken);
+        return string.Equals(TryReadElementValue(field), Normalize(answer.Option), StringComparison.Ordinal);
     }
 
     private async Task WaitForTextAsync(IntPtr windowHandle, string? text, CancellationToken cancellationToken)
@@ -546,6 +632,50 @@ public sealed class ActiveBrowserAutomationService
         await Task.Delay(60, cancellationToken);
         NativeMethods.SendEnter();
         await Task.Delay(100, cancellationToken);
+    }
+
+    private static bool IsChoiceSelected(AutomationElement element)
+    {
+        if (TryIsElementSelected(element))
+        {
+            return true;
+        }
+
+        foreach (var descendant in GetDescendants(element, maxCount: 24))
+        {
+            if (TryIsElementSelected(descendant))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryIsElementSelected(AutomationElement element)
+    {
+        try
+        {
+            if (element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var selectionPattern) &&
+                selectionPattern is SelectionItemPattern selectionItem &&
+                selectionItem.Current.IsSelected)
+            {
+                return true;
+            }
+
+            if (element.TryGetCurrentPattern(TogglePattern.Pattern, out var togglePattern) &&
+                togglePattern is TogglePattern toggle &&
+                toggle.Current.ToggleState == ToggleState.On)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Ignore inaccessible patterns and continue verifying elsewhere.
+        }
+
+        return false;
     }
 
     private async Task PasteToFocusedElementAsync(IntPtr windowHandle, string text, bool overwrite, CancellationToken cancellationToken)

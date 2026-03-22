@@ -446,6 +446,110 @@
     target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
   }
 
+  function resolveChoiceVerificationTarget(element) {
+    if (!(element instanceof Element)) {
+      return null;
+    }
+
+    if (element.matches("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']")) {
+      return element;
+    }
+
+    const descendant = element.querySelector("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']");
+    if (descendant) {
+      return descendant;
+    }
+
+    const enclosingLabel = element.closest("label");
+    if (enclosingLabel) {
+      const labelledInput = enclosingLabel.querySelector("input[type='radio'], input[type='checkbox']");
+      if (labelledInput) {
+        return labelledInput;
+      }
+    }
+
+    return element.closest("[role='radio'], [role='checkbox']") || element;
+  }
+
+  function isChoiceSelected(element) {
+    const target = resolveChoiceVerificationTarget(element);
+    if (!(target instanceof Element)) {
+      return false;
+    }
+
+    if ("checked" in target && typeof target.checked === "boolean") {
+      return target.checked;
+    }
+
+    const ariaChecked = normalize(target.getAttribute("aria-checked"));
+    if (ariaChecked === "true") {
+      return true;
+    }
+
+    if (normalize(target.getAttribute("aria-selected")) === "true") {
+      return true;
+    }
+
+    return Boolean(
+      target.querySelector("input[type='radio']:checked, input[type='checkbox']:checked, [role='radio'][aria-checked='true'], [role='checkbox'][aria-checked='true']")
+    );
+  }
+
+  function readFieldValue(element) {
+    if (!(element instanceof Element)) {
+      return "";
+    }
+
+    if (isContentEditable(element)) {
+      return normalize(element.textContent || element.innerText);
+    }
+
+    if ("value" in element) {
+      return normalize(element.value);
+    }
+
+    return normalize(element.textContent || element.innerText);
+  }
+
+  function isFieldValueApplied(element, expectedText) {
+    const actualValue = readFieldValue(element);
+    const expectedValue = normalize(expectedText);
+    if (!actualValue || !expectedValue) {
+      return false;
+    }
+
+    return actualValue === expectedValue || actualValue.includes(expectedValue) || expectedValue.includes(actualValue);
+  }
+
+  async function tryApplyAnswerEntry(answer) {
+    const questionText = normalize(answer.question);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const match = findChoiceLikeElement(answer.option, questionText, "radio") ||
+        findChoiceLikeElement(answer.option, questionText, "checkbox");
+      if (match) {
+        clickElement(match);
+        await delay(90 + (attempt * 45));
+        if (isChoiceSelected(match)) {
+          return true;
+        }
+      }
+
+      const textField = findTextResponseField(questionText, answer.option);
+      if (textField) {
+        fillField(textField, answer.option);
+        await delay(75 + (attempt * 35));
+        if (isFieldValueApplied(textField, answer.option)) {
+          return true;
+        }
+      }
+
+      await delay(35);
+    }
+
+    return false;
+  }
+
   function pressKey(key) {
     const activeElement = document.activeElement || document.body;
     const normalized = String(key || "Enter").trim();
@@ -814,31 +918,28 @@
 
     for (let pageIndex = 0; pageIndex < maxPages && pending.length > 0; pageIndex += 1) {
       let appliedThisPage = 0;
+      let pagePass = 0;
+      let madeProgress = true;
 
-      for (let index = pending.length - 1; index >= 0; index -= 1) {
-        const answer = pending[index];
-        const questionText = normalize(answer.question);
-        const match = findChoiceLikeElement(answer.option, questionText, "radio") ||
-          findChoiceLikeElement(answer.option, questionText, "checkbox");
-        if (match) {
-          clickElement(match);
-          await delay(140);
+      while (pagePass < 3 && madeProgress && pending.length > 0) {
+        madeProgress = false;
+
+        for (let index = pending.length - 1; index >= 0; index -= 1) {
+          const answer = pending[index];
+          if (!await tryApplyAnswerEntry(answer)) {
+            continue;
+          }
+
           pending.splice(index, 1);
           applied += 1;
           appliedThisPage += 1;
-          continue;
+          madeProgress = true;
         }
 
-        const textField = findTextResponseField(questionText, answer.option);
-        if (!textField) {
-          continue;
+        pagePass += 1;
+        if (madeProgress) {
+          await delay(85);
         }
-
-        fillField(textField, answer.option);
-        await delay(140);
-        pending.splice(index, 1);
-        applied += 1;
-        appliedThisPage += 1;
       }
 
       if (pending.length === 0) {
@@ -855,7 +956,7 @@
       }
 
       clickElement(nextElement);
-      await delay(appliedThisPage > 0 ? 950 : 700);
+      await delay(appliedThisPage > 0 ? 820 : 620);
     }
 
     if (applied === 0) {

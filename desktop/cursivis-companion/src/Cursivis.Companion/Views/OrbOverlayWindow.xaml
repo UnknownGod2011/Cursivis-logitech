@@ -193,8 +193,8 @@
                 </Ellipse>
 
                 <Ellipse x:Name="VoiceGlowHalo"
-                         Width="186"
-                         Height="186"
+                         Width="170"
+                         Height="170"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
                          Opacity="0"
@@ -204,12 +204,22 @@
                                              GradientOrigin="0.5,0.5"
                                              RadiusX="0.5"
                                              RadiusY="0.5">
-                            <GradientStop Color="#D0F562E7" Offset="0.02" />
-                            <GradientStop Color="#985EEBFF" Offset="0.34" />
-                            <GradientStop Color="#365EEBFF" Offset="0.68" />
-                            <GradientStop Color="#003B5A64" Offset="1" />
+                            <GradientStop Color="#00000000" Offset="0.00" />
+                            <GradientStop Color="#12334C61" Offset="0.56" />
+                            <GradientStop Color="#1E96D8FF" Offset="0.82" />
+                            <GradientStop Color="#00000000" Offset="1" />
                         </RadialGradientBrush>
                     </Ellipse.Fill>
+                    <Ellipse.Stroke>
+                        <SolidColorBrush Color="#7EDCF5FF" />
+                    </Ellipse.Stroke>
+                    <Ellipse.StrokeThickness>1.4</Ellipse.StrokeThickness>
+                    <Ellipse.Effect>
+                        <DropShadowEffect BlurRadius="20"
+                                          ShadowDepth="0"
+                                          Color="#86BEEAFF"
+                                          Opacity="0.42" />
+                    </Ellipse.Effect>
                     <Ellipse.RenderTransform>
                         <ScaleTransform x:Name="VoiceGlowScaleTransform" ScaleX="1" ScaleY="1" />
                     </Ellipse.RenderTransform>

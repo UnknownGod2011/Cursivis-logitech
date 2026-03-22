@@ -1,12 +1,18 @@
 # Cursivis Browser Action Agent
 
-Local Playwright-powered browser executor used by the companion's `Take Action` flow.
+Local browser executor used by the companion’s `Take Action` flow.
 
 ## Purpose
 
-- Maintain a managed browser session for browser-first agent tasks
-- Inspect live page context for Gemini planning
-- Execute safe structured browser steps returned by the backend
+- maintain a managed browser session for fallback browser tasks
+- inspect live page context for browser planning
+- execute structured steps when the current-tab path is unavailable
+
+## Why It Matters
+
+This is what turns Cursivis from “generate an answer” into “finish the workflow.”
+
+For Logitech, that is important because the real product value is not just triggering intelligence. It is turning hardware-driven intent into completed work.
 
 ## Endpoints
 
@@ -23,14 +29,6 @@ npm install
 npm start
 ```
 
-Default port: `48820`
+Default port:
 
-Optional env vars:
-
-- `CURSIVIS_BROWSER_AGENT_PORT=48820`
-- `CURSIVIS_BROWSER_CHANNEL=msedge|chrome`
-
-## Notes
-
-- The agent acts on the managed browser session it launches.
-- For highest reliability, perform browser workflows inside that managed Cursivis browser window before pressing `Take Action`.
+- `48820`

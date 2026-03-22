@@ -1,76 +1,78 @@
 # Implementation Roadmap
 
-## Milestone A: Vertical Slice (Immediate)
+## Milestone A: Core Cursivis Vertical Slice
 
 Goal:
 
-- Run a complete text flow using mock trigger and real Gemini response.
+- prove the full selection -> trigger -> result loop
 
 Deliver:
 
-- Companion WPF shell with mock trigger button
-- Text selection detection via clipboard capture strategy
-- Orb state machine (`Idle -> Processing -> Completed/Error`)
-- Backend `/api/intent` summarize endpoint
-- Clipboard write + expandable result panel
+- companion orb and result UI
+- selection capture
+- result handling
+- pluggable AI backend response path
 
 ## Milestone B: Guided Mode
 
 Goal:
 
-- Add manual action choice with dynamic options.
+- create a flexible option-selection layer around the orb
 
 Deliver:
 
-- Guided options UI near orb
-- Backend suggestion endpoint behavior
-- action override in smart flow (`More options`)
+- guided options around orb
+- dynamic context-aware expansion
+- custom task fallback
 
-## Milestone C: Multimodal
+## Milestone C: Multimodal Input
 
 Goal:
 
-- Add no-text workflows.
+- support text, image, and voice in one coherent flow
 
 Deliver:
 
-- Lasso region capture overlay
-- image payload to backend for Gemini analysis
-- pixel hex fallback when lasso is canceled
+- lasso region capture
+- text + image requests
+- hold-to-talk capture and transcription
 
-## Milestone D: Logitech Integration
+## Milestone D: Browser Execution
 
 Goal:
 
-- Replace mock trigger with real Logitech device events.
+- move from answer generation to real workflow execution
 
 Deliver:
 
-- Logi Actions SDK plugin action(s)
-- Local IPC event sender
-- Optional haptic feedback bindings
+- browser action planning
+- current-tab execution path
+- managed fallback path
+- undo and preview support
 
-## Milestone E: Voice + Memory
+## Milestone E: Logitech Integration
 
 Goal:
 
-- Enable long-press voice commands and personalization.
+- make Cursivis feel native to Logitech hardware
 
 Deliver:
 
-- long-press capture pipeline
-- speech-to-text integration
-- local intent memory ranking
+- plugin actions
+- trigger IPC
+- haptic events
+- dial / ring interaction model
 
-## Milestone F: Demo Hardening
+## Milestone F: Premium Demo Hardening
 
 Goal:
 
-- Stable competition demo runtime.
+- produce a stable Logitech competition build
 
 Deliver:
 
 - startup scripts
-- crash recovery paths
-- latency and reliability telemetry
-- polished UX and scripted demo paths
+- reliability fixes
+- visual polish
+- consistent talk / trigger / action flows
+- competition-ready demo paths

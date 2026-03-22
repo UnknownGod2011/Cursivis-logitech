@@ -60,9 +60,9 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
             // Return the best transcript available so far.
         }
 
-        return !string.IsNullOrWhiteSpace(_latestModelText)
-            ? _latestModelText
-            : _latestInputTranscript;
+        return !string.IsNullOrWhiteSpace(_latestInputTranscript)
+            ? _latestInputTranscript
+            : _latestModelText;
     }
 
     public async ValueTask DisposeAsync()
@@ -172,12 +172,12 @@ public sealed class LiveVoiceCommandClient : IAsyncDisposable
         if (input)
         {
             _latestInputTranscript = text;
+            TranscriptUpdated?.Invoke(this, text);
         }
         else
         {
             _latestModelText = text;
+            TranscriptUpdated?.Invoke(this, _latestInputTranscript ?? text);
         }
-
-        TranscriptUpdated?.Invoke(this, text);
     }
 }

@@ -171,12 +171,13 @@ public sealed class TriggerController : IDisposable
 
     public async Task HandleLongPressAsync(CancellationToken cancellationToken)
     {
+        var selectionSource = ResolveSelectionSource();
         _orbOverlayWindow.MoveToTopRight();
         _orbOverlayWindow.SetState(
             OrbState.Listening,
             cancellationToken.CanBeCanceled ? "Listening... release to send" : "Listening... speak your command");
         EnsureWindowVisible(_orbOverlayWindow);
-        _lastExternalWindow = _windowFocusTracker.LastExternalWindowHandle;
+        _lastExternalWindow = selectionSource.WindowHandle;
 
         var voiceCommand = await _voiceCommandPromptService.PromptAsync(
             (state, message) => _orbOverlayWindow.SetState(state, message),
@@ -188,7 +189,11 @@ public sealed class TriggerController : IDisposable
             return;
         }
 
-        await HandleTapAsync(CancellationToken.None, voiceCommand, forceActionMenu: false);
+        await HandleTapAsync(
+            CancellationToken.None,
+            voiceCommand,
+            forceActionMenu: false,
+            selectionSource.WindowHandle != IntPtr.Zero ? selectionSource : null);
     }
 
     public void HandleDialTick(int delta)
@@ -291,10 +296,14 @@ public sealed class TriggerController : IDisposable
 
     public async Task HandleTapAsync(CancellationToken cancellationToken)
     {
-        await HandleTapAsync(cancellationToken, voiceCommand: null, forceActionMenu: false);
+        await HandleTapAsync(cancellationToken, voiceCommand: null, forceActionMenu: false, selectionSourceOverride: null);
     }
 
-    private async Task HandleTapAsync(CancellationToken cancellationToken, string? voiceCommand, bool forceActionMenu)
+    private async Task HandleTapAsync(
+        CancellationToken cancellationToken,
+        string? voiceCommand,
+        bool forceActionMenu,
+        (IntPtr WindowHandle, string? ProcessName)? selectionSourceOverride)
     {
         if (!await _runLock.WaitAsync(0, cancellationToken))
         {
@@ -304,7 +313,10 @@ public sealed class TriggerController : IDisposable
         try
         {
             var cursor = _cursorTracker.CurrentPosition;
-            var selectionSource = ResolveSelectionSource();
+            var selectionSource = selectionSourceOverride.HasValue &&
+                                  selectionSourceOverride.Value.WindowHandle != IntPtr.Zero
+                ? selectionSourceOverride.Value
+                : ResolveSelectionSource();
             _lastExternalWindow = selectionSource.WindowHandle;
 
             _orbOverlayWindow.MoveToTopRight();

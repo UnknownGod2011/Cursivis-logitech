@@ -1,163 +1,78 @@
-# How I Built Cursivis: A Cursor-Native Gemini UI Agent on Google Cloud
-
-I created this content for the purposes of entering the Gemini Live Agent Challenge.  
-#GeminiLiveAgentChallenge
+# How I Built Cursivis For Logitech DevStudio 2026
 
 ## Introduction
 
-Most AI products still start with the same workflow: open a chatbot, describe the context, paste content, wait for an answer, then manually apply that answer somewhere else.
+Cursivis is a cursor-native workflow system designed for Logitech’s device ecosystem, especially **MX Creative Console**, **MX Master 4**, and **Actions Ring**.
 
-I wanted to build something different.
+The core product idea is simple:
 
-That idea became **Cursivis**:
+> **Selection = Context, Trigger = Intent, Cursivis = Action**
 
-> **Selection = Context, Trigger = Intent, Gemini = Intelligence**
-
-Instead of moving work into a prompt box, Cursivis brings AI directly to what the user is already looking at. The user selects text, an image, or a UI region, presses a trigger, and Gemini decides the most useful action based on context. Then Cursivis either returns a useful result or takes action directly in the browser UI.
+Instead of opening a chatbot, describing context, and manually applying the answer, the user simply selects what they are already working on and triggers Cursivis through a lightweight control surface.
 
 ## What Cursivis Does
 
-Cursivis is a **cursor-native multimodal AI agent** designed for desktop workflows.
+Cursivis can:
 
-It can:
-
-- summarize long reports and articles
-- explain or debug selected code
-- rewrite rough text or emails
-- draft responses to emails
+- summarize long reports
+- explain or improve selected code
+- rewrite drafts and emails
+- respond to live browser tasks
 - analyze selected images
-- accept voice commands
-- autofill forms
-- reply in live browser tabs
+- combine selection + voice instruction
+- execute workflows through `Take Action`
 
-The goal is to move beyond text-in/text-out AI and toward an interaction model where the AI becomes part of the interface itself.
+The goal is to make Logitech hardware feel like an intelligent command layer for real work.
 
-## Core Product Idea
+## Why This Fits Logitech
 
-The main interaction loop is very simple:
+The project is built specifically around the value of Logitech’s interactive devices:
 
-1. The user selects something on screen
-2. The user presses a trigger
-3. Gemini reasons about the selection
-4. Cursivis returns the most useful result
-5. The user can optionally press **Take Action** to execute it in the UI
+- **Trigger** for immediate action
+- **Talk** for hold-to-talk refinement
+- **Snip-it** for image and region selection
+- **Action** for executing the result
+- dial / ring interactions for option navigation and control
 
-That means a selection is not just text. It is context.
+This is what makes Cursivis feel different from a normal AI app. It is meant to live on top of workflows, not replace them with a chat window.
 
-This made Cursivis a strong fit for the **UI Navigator** category of the Gemini Live Agent Challenge, because it does not stop at answering. It interprets screen context and can output executable actions for the interface.
+## System Design
 
-## How I Built It
+Cursivis is composed of:
 
-Cursivis is built as a multi-part system:
+- a Windows companion app in WPF
+- a Logitech plugin workstream using the Actions SDK
+- a browser execution layer for real current-tab actions
+- a multimodal AI backend
+- voice, image, and selection capture flows
 
-- a **Windows companion app** in WPF and .NET 8
-- a **Gemini backend** in Node.js using the **Google GenAI SDK**
-- a **voice pipeline** for hold-to-talk capture and transcription
-- a **Chromium browser extension** for real current-tab actions
-- a **local browser bridge** for DOM-aware execution
-- a **Google Cloud Run deployment** for the backend
-- integration with the **Logitech MX Creative Console** interaction model
+The most important part is not just generating text. It is turning the active on-screen context into something actionable through Logitech hardware and UI.
 
-The backend handles:
+## Key Challenges
 
-- contextual reasoning
-- multimodal text and image understanding
-- dynamic action suggestion
-- voice transcription
-- browser action planning
+The hardest parts of the system were:
 
-The companion app handles:
+- keeping Smart Mode genuinely useful and context-aware
+- making Guided Mode compact and natural around the orb
+- preserving the latest selection reliably
+- making voice input feel like a true refinement layer
+- making `Take Action` reliable on real browser workflows
 
-- text selection capture
-- lasso screenshot capture
-- orb and result UI
-- guided and smart modes
-- action preview and follow-up flows
+## What Makes Cursivis Interesting
 
-For browser execution, I built a real-tab path through a Chromium extension so Cursivis can act in the browser session the user is already logged into, instead of depending only on a separate managed automation browser.
+The product is trying to answer a very specific question:
 
-## Why Gemini Was Important
+**What if Logitech’s control surfaces could become an intelligent workflow layer, not just shortcut devices?**
 
-Gemini was central to the project because I did not want a rigid menu-driven assistant.
-
-The most important design goal was:
-
-- the system should look at the selection
-- understand what kind of content it is
-- infer the likely user intent
-- return the most useful result
-
-That means the same trigger can behave differently depending on context:
-
-- a report might be summarized
-- foreign-language text might be translated
-- broken code might be debugged
-- correct code might be explained
-- an email might be polished or replied to
-
-This flexibility is what made the interaction feel agentic instead of scripted.
-
-## Google Cloud Deployment
-
-To meet the challenge requirement and make the backend reproducible, I deployed the Gemini backend to **Google Cloud Run**.
-
-That deployment path includes:
-
-- containerizing the backend
-- building it with Cloud Build
-- deploying it to Cloud Run
-- verifying the live backend with a health endpoint
-
-I also added an automated deployment script so the cloud deployment process is visible in the codebase and reproducible by judges.
-
-## Challenges I Faced
-
-The hardest part was not generating text. The hard part was building a system that feels like a real UI agent.
-
-Some of the biggest challenges were:
-
-- keeping Smart Mode useful without over-hardcoding behavior
-- handling text, image, and voice in one coherent flow
-- making browser actions work inside real logged-in tabs
-- keeping the UI smooth and understandable
-- balancing flexibility with safe execution
-
-Voice interaction and browser action reliability were especially challenging, because those are the places where a project stops being a demo and starts behaving like a real agent.
-
-## What I Learned
-
-This project taught me a few important things:
-
-- multimodal AI becomes much more compelling when tied to a real interface
-- good agent UX depends heavily on trust and clarity
-- hardware triggers create a much more natural feeling than opening a chatbot
-- the most useful AI interaction is often not “ask a prompt” but simply “select and trigger”
-- execution quality matters as much as model quality
-
-## Why Cursivis Matters
-
-Cursivis is my attempt to explore a future where AI is no longer a separate destination.
-
-Instead of:
-
-- opening a chat app
-- explaining context
-- copying data in and out
-- manually taking action
-
-the user can simply:
-
-- select
-- trigger
-- review
-- act
-
-That is the experience I wanted to prototype: a multimodal AI layer that lives directly on top of everyday work.
+That is the direction Cursivis explores.
 
 ## Closing
 
-Cursivis started from one simple idea:
+Cursivis is not positioned as a generic AI demo anymore.  
+It is being refined as a Logitech-native product idea for:
 
-**What if the cursor itself became an AI agent?**
+- MX Creative Console
+- MX Master 4
+- Actions Ring
 
-By combining Gemini, Google Cloud, multimodal input, browser execution, and a hardware-triggered UX, I built a system that moves beyond the text box and turns ordinary on-screen context into something actionable.
+The vision is to make selection-driven, context-aware action feel like a first-class hardware workflow.
