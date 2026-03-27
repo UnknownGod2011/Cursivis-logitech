@@ -420,6 +420,38 @@ will send the link as soon as verification finishes`));
   assert.equal(callCount, 2);
 });
 
+test("question-set answers keep the base generation path without a special needs-user-input retry", async () => {
+  let callCount = 0;
+  const retryingGenerator = async () => {
+    callCount += 1;
+    return {
+      text: "Q1 [Capital of France]: Needs user input.",
+      model: "fake-test-model",
+      latencyMs: 10,
+      usage: { inputTokens: 12, outputTokens: 27 }
+    };
+  };
+
+  const app = createApp({
+    textGenerator: retryingGenerator,
+    intentRouter: async () => ({
+      contentType: "question",
+      bestAction: "answer_question",
+      confidence: 0.92,
+      alternatives: ["answer_question", "explain", "rewrite"]
+    })
+  });
+
+  const response = await request(app)
+    .post("/analyze")
+    .send(makePayload("1. Capital of France?\na. Berlin\nb. Paris\nc. Rome\nd. Madrid", "answer_question"));
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.action, "answer_question");
+  assert.match(response.body.result, /Needs user input/i);
+  assert.equal(callCount, 1);
+});
+
 test("mailbox-style polished email switches from polish to draft_reply", async () => {
   const emailRouter = async ({ text }) => ({
     contentType: "email",
@@ -755,6 +787,21 @@ test("detectBrowserTaskPack recognizes Google Forms workflows", () => {
   assert.equal(pack?.id, "google_forms");
 });
 
+test("detectBrowserTaskPack does not mistake 'decomposers' for a mail compose page", () => {
+  const pack = detectBrowserTaskPack({
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Science Quiz",
+      visibleText: "1. Green plants prepare their own food a. Autotrophs d. Decomposers"
+    },
+    contentType: "mcq",
+    action: "answer_question",
+    voiceCommand: "fill these answers"
+  });
+
+  assert.equal(pack?.id, "google_forms");
+});
+
 test("inferFallbackType recognizes MCQ selections", () => {
   const type = inferFallbackType(`
 1. Capital of France
@@ -830,7 +877,7 @@ test("browser planner falls back to Gmail compose steps for email actions", asyn
 
   assert.equal(plan.goal, "apply_email_result");
   assert.ok(plan.steps.some((step) => step.tool === "open_new_tab"));
-  assert.ok(plan.steps.some((step) => step.tool === "fill_label" && step.label === "Message Body"));
+  assert.ok(plan.steps.some((step) => step.tool === "fill_editor" && step.label === "Message Body"));
 });
 
 test("browser planner falls back to reply flow for draft_reply actions on an open mail thread", async () => {
@@ -864,7 +911,78 @@ test("browser planner falls back to reply flow for draft_reply actions on an ope
 
   assert.equal(plan.goal, "reply_to_email");
   assert.ok(plan.steps.some((step) => step.tool === "click_role" && step.name === "Reply"));
-  assert.ok(plan.steps.some((step) => step.tool === "type_active"));
+  assert.ok(plan.steps.some((step) => step.tool === "fill_editor" && step.label === "Write a reply"));
+});
+
+test("browser planner drops malformed click_role steps and falls back to safe mail actions", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "mail_flow",
+        summary: "Click a button.",
+        requiresConfirmation: false,
+        steps: [
+          {
+            tool: "click_role",
+            role: "button"
+          }
+        ]
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "Re: Demo follow-up\n\nCan you send an update?",
+    resultText: "Thanks for the follow-up. Here is the updated status.",
+    action: "draft_reply",
+    voiceCommand: "reply to this email",
+    contentType: "email",
+    browserContext: {
+      url: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQexample",
+      title: "Demo follow-up - Gmail",
+      visibleText: "Reply Reply all Forward",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "reply_to_email");
+  assert.ok(plan.steps.some((step) => step.tool === "click_role" && step.name === "Reply"));
+});
+
+test("browser planner uses fill_editor for Discord message composers", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "discord_message",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "Please let the team know deployment is complete.",
+    resultText: "Deployment is complete. Please refresh and verify the dashboard.",
+    action: "draft_reply",
+    voiceCommand: "send this in discord",
+    contentType: "general_text",
+    browserContext: {
+      url: "https://discord.com/channels/@me",
+      title: "Discord",
+      visibleText: "Direct Messages Message @design-team",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "draft_or_send_discord_message");
+  assert.ok(plan.steps.some((step) => step.tool === "fill_editor" && step.label === "Type a message"));
 });
 
 test("browser planner falls back to answer-key execution for Google Forms answer keys", async () => {
@@ -900,7 +1018,125 @@ test("browser planner falls back to answer-key execution for Google Forms answer
   const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
   assert.ok(answerKeyStep);
   assert.equal(answerKeyStep.advancePages, false);
-  assert.ok(answerKeyStep.answers.some((answer) => answer.option === "Paris"));
+  assert.ok(answerKeyStep.answers.some((answer) => /paris/i.test(answer.option)));
+});
+
+test("browser planner prefers direct answer-key execution on Google Forms instead of model-generated per-step plans", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "answer_quiz_question",
+        summary: "Select Paris.",
+        requiresConfirmation: false,
+        steps: [
+          {
+            tool: "check_radio",
+            question: "Capital of France",
+            option: "Paris"
+          }
+        ]
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "1. Capital of France\nA) Berlin\nB) Paris\nC) Rome",
+    resultText: "Q1 [Capital of France]: Paris - It is the capital city of France.",
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "mcq",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Quiz",
+      visibleText: "Capital of France Berlin Paris Rome",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "fill_form_answers");
+  assert.equal(plan.steps.length, 1);
+  assert.equal(plan.steps[0].tool, "apply_answer_key");
+});
+
+test("browser planner prioritizes Google Forms over stale email-style action hints", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "mail_flow",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "20. Excess intake of food causes ----------------------.\na. Obesity\nb. Acidity\nc. Breathing problem\nd. Anaemia",
+    resultText: "Q20 [Excess intake of food causes]: Obesity - Excess food intake commonly leads to obesity.",
+    action: "draft_reply",
+    voiceCommand: "reply to this email",
+    contentType: "email",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Science Quiz",
+      visibleText: "20. Excess intake of food causes a. Obesity b. Acidity c. Breathing problem d. Anaemia",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "fill_form_answers");
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.ok(answerKeyStep.answers.some((answer) => /obesity/i.test(answer.option)));
+  assert.ok(!plan.steps.some((step) => step.tool === "click_role" && step.name === "Compose"));
+});
+
+test("browser planner rejects compose-style plans on Google Forms and falls back to answer-key execution", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "mail_flow",
+        summary: "Compose a reply.",
+        requiresConfirmation: false,
+        steps: [
+          {
+            tool: "click_role",
+            role: "button",
+            name: "Compose"
+          }
+        ]
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "1. Green plants prepare their own food, hence they are called as\nA) Autotrophs\nB) Parasites\nC) Heterotrophs\nD) Decomposers",
+    resultText: "Q1 [Green plants prepare their own food]: Autotrophs - Green plants make their own food.",
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "mcq",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Science Quiz",
+      visibleText: "Green plants prepare their own food Autotrophs Parasites Heterotrophs Decomposers",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "fill_form_answers");
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.ok(answerKeyStep.answers.some((answer) => /autotrophs/i.test(answer.option)));
+  assert.ok(!plan.steps.some((step) => step.tool === "click_role" && step.name === "Compose"));
 });
 
 test("browser planner preserves multi-question answer summaries for take action", async () => {
@@ -954,4 +1190,284 @@ Q16 Next term: 97 - continue the pattern`,
   assert.equal(answerKeyStep.advancePages, true);
   assert.ok(answerKeyStep.answers.some((answer) => answer.question === "Find k" && answer.option === "16/33"));
   assert.ok(answerKeyStep.answers.some((answer) => answer.question === "Next term" && answer.option === "97"));
+});
+
+test("browser planner preserves choice indexes for numbered MCQ answers instead of flattening them globally", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "form_fill",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: `1. Green plants prepare their own food.
+a. Autotrophs
+b. Herbivores
+c. Carnivores
+d. Decomposers
+
+2. Excess intake of food causes ________.
+a. Obesity
+b. Acidity
+c. Breathing problem
+d. Anaemia`,
+    resultText: `1. a
+2. a`,
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "mcq",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Science Quiz",
+      visibleText: "Question 1 Question 2",
+      interactiveElements: []
+    }
+  });
+
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.equal(answerKeyStep.answers.length, 2);
+  assert.equal(answerKeyStep.answers[0].questionIndex, 1);
+  assert.equal(answerKeyStep.answers[1].questionIndex, 2);
+  assert.equal(answerKeyStep.answers[0].choiceIndex, 0);
+  assert.equal(answerKeyStep.answers[1].choiceIndex, 0);
+});
+
+test("browser planner preserves multi-select checkbox answers and long text answers for Google Forms", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "form_fill",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: `Which of the following is found in Eukaryotic Cells that is absent in Prokaryotic Cells?
+Check all that apply
+Ribosomes
+Smooth Endoplasmic reticulum
+Cell Wall
+Chloroplasts
+Lysosomes
+Microtubules
+Centrioles
+Mitochondria
+Nucleolus
+Plasma Membrane
+DNA
+
+Importance of cells and organelles
+Short answer text`,
+    resultText: `Q1 [Eukaryotic/Prokaryotic Differences]: Smooth Endoplasmic reticulum, Chloroplasts, Lysosomes, Microtubules, Centrioles, Mitochondria, Nucleolus, Nucleus - Absent in Prokaryotes.
+Q8 [Importance of Cells/Organelles]: Cells are the fundamental units of life, performing all essential functions. Organelles specialize within cells to carry out specific tasks, enabling complex processes necessary for survival, growth, and reproduction.`,
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "question",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Biology Quiz",
+      visibleText: "Check all that apply Short answer text",
+      interactiveElements: []
+    }
+  });
+
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.ok(answerKeyStep.answers.length >= 8);
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 1 && answer.option === "Chloroplasts"));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 8 && /Cells are the fundamental units of life/i.test(answer.option)));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 1 && /which of the following is found in eukaryotic cells/i.test(answer.question)));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 8 && /importance of cells and organelles/i.test(answer.question)));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.option === "Chloroplasts"));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.option === "Mitochondria"));
+  assert.ok(answerKeyStep.answers.some((answer) => /Cells are the fundamental units of life/i.test(answer.option)));
+});
+
+test("browser planner preserves explicit numbered question text and exact option labels for radio-only quizzes", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "form_fill",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: `Q1. Green plants are
+a. Autotrophs
+b. Heterotrophs
+c. Parasites
+d. Saprotrophs
+
+Q2. Milk products are rich in
+a. Carbohydrates
+b. Proteins
+c. Vitamins
+d. Minerals
+
+Q3. Spices provide
+a. Colour
+b. Flavour
+c. Protein
+d. Water
+
+Q4. An animal that eats other animals is called
+a. Herbivore
+b. Carnivore
+c. Omnivore
+d. Scavenger
+
+Q5. Food gives us
+a. Energy
+b. Growth
+c. Repair
+d. All of these`,
+    resultText: `Q1 [Green plants]: Autotrophs - Self-feeders.
+Q2 [Milk products]: Minerals - Good source of calcium.
+Q3 [Spices provide]: Flavour - Enhance taste.
+Q4 [Eats animals]: Carnivore - Meat-eater.
+Q5 [Food benefits]: All of these - Provides energy, growth, repair.`,
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "question",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Food Quiz",
+      visibleText: "",
+      interactiveElements: []
+    }
+  });
+
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.equal(answerKeyStep.answers.length, 5);
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 1 && /green plants are/i.test(answer.question) && /autotrophs/i.test(answer.option)));
+  assert.ok(answerKeyStep.answers.some((answer) => answer.questionIndex === 5 && /food gives us/i.test(answer.question) && /all of these/i.test(answer.option)));
+});
+
+test("browser planner drops literal needs-user-input placeholders from take action answer keys", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "form_fill",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: `1. Capital of France?\na. Berlin\nb. Paris\nc. Rome\nd. Madrid\n\n2. Explain why cells are important.\nYour answer`,
+    resultText: `Q1 [Capital of France]: Paris - Capital city.\nQ2 [Cell importance]: Needs user input.`,
+    action: "answer_question",
+    voiceCommand: "fill these answers",
+    contentType: "question",
+    browserContext: {
+      url: "https://docs.google.com/forms/d/e/example/viewform",
+      title: "Biology Quiz",
+      visibleText: "Capital of France Your answer",
+      interactiveElements: []
+    }
+  });
+
+  const answerKeyStep = plan.steps.find((step) => step.tool === "apply_answer_key");
+  assert.ok(answerKeyStep);
+  assert.equal(answerKeyStep.answers.length, 1);
+  assert.ok(/paris/i.test(answerKeyStep.answers[0].option));
+});
+
+test("browser planner uses deterministic mail plan on mail surfaces instead of empty model plans", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "mail_flow",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "Re: Demo follow-up\n\nCan you send an update?",
+    resultText: "Thanks for the follow-up. Here is the updated status.",
+    action: "draft_reply",
+    voiceCommand: "reply to this email",
+    contentType: "email",
+    browserContext: {
+      url: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQ...",
+      title: "Inbox",
+      visibleText: "Reply Reply all Forward",
+      interactiveElements: [
+        { role: "button", label: "Reply", nameAttribute: "", type: "button", options: [] }
+      ]
+    }
+  });
+
+  assert.equal(plan.goal, "reply_to_email");
+  assert.ok(plan.steps.some((step) => step.tool === "click_role" && step.name === "Reply"));
+  assert.ok(plan.steps.some((step) => step.tool === "fill_editor"));
+});
+
+test("browser planner uses direct editor insertion for document-style editor surfaces", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => ({
+      text: JSON.stringify({
+        goal: "generic_plan",
+        summary: "No safe action.",
+        requiresConfirmation: false,
+        steps: []
+      }),
+      model: "fake-test-model",
+      latencyMs: 5,
+      usage: { inputTokens: 10, outputTokens: 10 }
+    })
+  });
+
+  const plan = await planner({
+    originalText: "Short note",
+    resultText: "Refined note for the document.",
+    action: "rewrite_structured",
+    voiceCommand: "insert this into the page",
+    contentType: "general_text",
+    browserContext: {
+      url: "https://www.notion.so/example",
+      title: "Workspace",
+      visibleText: "Untitled",
+      interactiveElements: [
+        { role: "textbox", label: "Page content", nameAttribute: "", type: "textbox", options: [] }
+      ]
+    }
+  });
+
+  assert.equal(plan.goal, "insert_generated_result");
+  assert.deepEqual(plan.steps.map((step) => step.tool), ["fill_editor"]);
 });

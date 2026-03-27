@@ -1,9 +1,9 @@
 const http = require("node:http");
 
 const PORT = Number(process.env.CURSIVIS_EXTENSION_BRIDGE_PORT || 48830);
-const REQUEST_TIMEOUT_MS = Number(process.env.CURSIVIS_EXTENSION_BRIDGE_TIMEOUT_MS || 30000);
-const EXTENSION_POLL_TIMEOUT_MS = Number(process.env.CURSIVIS_EXTENSION_POLL_TIMEOUT_MS || 25000);
-const EXTENSION_STALE_AFTER_MS = Number(process.env.CURSIVIS_EXTENSION_STALE_AFTER_MS || 45000);
+const REQUEST_TIMEOUT_MS = Number(process.env.CURSIVIS_EXTENSION_BRIDGE_TIMEOUT_MS || 90000);
+const EXTENSION_POLL_TIMEOUT_MS = Number(process.env.CURSIVIS_EXTENSION_POLL_TIMEOUT_MS || 85000);
+const EXTENSION_STALE_AFTER_MS = Number(process.env.CURSIVIS_EXTENSION_STALE_AFTER_MS || 120000);
 const NATIVE_HOST_MODE = !process.stdout.isTTY && !process.stdin.isTTY;
 
 let readBuffer = Buffer.alloc(0);

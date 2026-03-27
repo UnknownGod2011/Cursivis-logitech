@@ -6,6 +6,27 @@ function includesAny(haystack, needles) {
   return needles.some((needle) => haystack.includes(needle));
 }
 
+function containsWholePhrase(haystack, phrase) {
+  const escaped = String(phrase).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|\\b)${escaped}(\\b|$)`, "i").test(String(haystack || ""));
+}
+
+function looksLikeMailSurface({ url, title, visibleText }) {
+  if (includesAny(url, ["mail.google.com", "outlook.office.com", "outlook.live.com"])) {
+    return true;
+  }
+
+  const headingText = `${title} ${visibleText}`;
+  return [
+    "compose",
+    "new message",
+    "inbox",
+    "reply",
+    "reply all",
+    "schedule send"
+  ].some((phrase) => containsWholePhrase(headingText, phrase));
+}
+
 export function detectBrowserTaskPack({ browserContext, contentType, action, voiceCommand }) {
   const url = normalize(browserContext?.url);
   const title = normalize(browserContext?.title);
@@ -15,7 +36,7 @@ export function detectBrowserTaskPack({ browserContext, contentType, action, voi
   const normalizedAction = normalize(action).replaceAll("_", " ");
   const normalizedVoiceCommand = normalize(voiceCommand);
 
-  if (includesAny(contextText, ["mail.google.com", "outlook.office.com", "outlook.live.com", "compose", "inbox"])) {
+  if (looksLikeMailSurface({ url, title, visibleText })) {
     return {
       id: "mail_compose",
       label: "Mail Compose",
@@ -34,7 +55,7 @@ export function detectBrowserTaskPack({ browserContext, contentType, action, voi
       label: "Discord",
       guidance: [
         "Discord pack: prioritize opening the correct DM or channel, focusing the message composer, and typing the generated message.",
-        "Use fill_label or type_active for the composer when possible.",
+        "Use fill_editor for the composer when possible, and fall back to type_active only when the editor is already focused.",
         "Only trigger send when the command explicitly asks for it, and keep confirmation required."
       ].join(" ")
     };

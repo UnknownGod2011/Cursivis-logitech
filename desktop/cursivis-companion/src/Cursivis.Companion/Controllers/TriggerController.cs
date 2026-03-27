@@ -1298,7 +1298,21 @@ public sealed class TriggerController : IDisposable
             var executedInActiveBrowser = false;
             if (shouldUseExtensionBrowserSession)
             {
-                execution = await _extensionAutomationClient.ExecutePlanAsync(plan, cancellationToken);
+                try
+                {
+                    execution = await _extensionAutomationClient.ExecutePlanAsync(plan, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    var recoveredExecution = await TryRecoverExtensionExecutionFailureAsync(plan, ex, cancellationToken);
+                    if (recoveredExecution is null)
+                    {
+                        throw;
+                    }
+
+                    execution = recoveredExecution;
+                }
+
                 if (execution.Success)
                 {
                     executedInExtensionBrowser = true;
@@ -2007,7 +2021,7 @@ public sealed class TriggerController : IDisposable
             $"Steps executed: {execution.ExecutedSteps}"
         };
 
-        if (!execution.Success && !string.IsNullOrWhiteSpace(execution.Details))
+        if (!string.IsNullOrWhiteSpace(execution.Details))
         {
             lines.Add($"Details: {execution.Details}");
         }
@@ -2108,5 +2122,100 @@ public sealed class TriggerController : IDisposable
         return string.IsNullOrWhiteSpace(imageBase64)
             ? default
             : (imageBase64, "image/png");
+    }
+
+    private async Task<BrowserExecutionResponse?> TryRecoverExtensionExecutionFailureAsync(
+        BrowserActionPlanResponse plan,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        if (plan.Steps.Count == 0 || !plan.Steps.Any(step => string.Equals(step.Tool, "fill_editor", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
+        var extensionContext = await _extensionAutomationClient.TryGetActiveTabContextAsync(cancellationToken);
+        var pageContext = extensionContext?.PageContext;
+        if (extensionContext?.Ok != true || pageContext is null || string.IsNullOrWhiteSpace(pageContext.VisibleText))
+        {
+            return null;
+        }
+
+        var matchingStep = plan.Steps
+            .Where(step => string.Equals(step.Tool, "fill_editor", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(step.Text))
+            .FirstOrDefault(step => VisibleTextContainsPlannedText(pageContext.VisibleText, step.Text!));
+
+        if (matchingStep is null)
+        {
+            return null;
+        }
+
+        return new BrowserExecutionResponse
+        {
+            Ok = true,
+            Success = true,
+            ExecutedSteps = plan.Steps.Count,
+            Message = "Applied in the current logged-in browser tab.",
+            Details = $"Detected the drafted content in the page after the extension reported '{exception.Message}'. Cursivis treated the action as successful because the reply text is visibly present.",
+            Logs = plan.Steps.Select(step => step.Tool).Take(8).ToList(),
+            PageContext = pageContext
+        };
+    }
+
+    private static bool VisibleTextContainsPlannedText(string visibleText, string expectedText)
+    {
+        if (string.IsNullOrWhiteSpace(visibleText) || string.IsNullOrWhiteSpace(expectedText))
+        {
+            return false;
+        }
+
+        var normalizedVisible = NormalizeVisibleText(visibleText);
+        var normalizedExpected = NormalizeVisibleText(expectedText);
+        if (normalizedExpected.Length < 24)
+        {
+            return false;
+        }
+
+        if (normalizedVisible.Contains(normalizedExpected, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var lines = expectedText
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(NormalizeVisibleText)
+            .Where(line => line.Length >= 18)
+            .ToList();
+
+        if (lines.Count == 0)
+        {
+            return ContainsEdgeSnippet(normalizedVisible, normalizedExpected);
+        }
+
+        var matchedLines = lines.Count(line => normalizedVisible.Contains(line, StringComparison.OrdinalIgnoreCase));
+        return matchedLines >= Math.Min(2, lines.Count) || ContainsEdgeSnippet(normalizedVisible, normalizedExpected);
+    }
+
+    private static string NormalizeVisibleText(string value)
+    {
+        return string.Join(
+            " ",
+            value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static bool ContainsEdgeSnippet(string visibleText, string expectedText)
+    {
+        if (string.IsNullOrWhiteSpace(visibleText) || string.IsNullOrWhiteSpace(expectedText))
+        {
+            return false;
+        }
+
+        var firstSnippetLength = Math.Min(140, expectedText.Length);
+        var lastSnippetLength = Math.Min(140, expectedText.Length);
+        var firstSnippet = expectedText[..firstSnippetLength];
+        var lastSnippet = expectedText[^lastSnippetLength..];
+
+        return (firstSnippet.Length >= 40 && visibleText.Contains(firstSnippet, StringComparison.OrdinalIgnoreCase)) ||
+               (lastSnippet.Length >= 40 && visibleText.Contains(lastSnippet, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -14,11 +14,16 @@ public sealed class ExtensionAutomationClient : IDisposable
     {
         var bridgeUrl = Environment.GetEnvironmentVariable("CURSIVIS_EXTENSION_BRIDGE_URL")
             ?? "http://127.0.0.1:48830";
+        var timeoutSeconds = 90;
+        if (int.TryParse(Environment.GetEnvironmentVariable("CURSIVIS_EXTENSION_HTTP_TIMEOUT_SEC"), out var parsedTimeoutSeconds))
+        {
+            timeoutSeconds = Math.Clamp(parsedTimeoutSeconds, 30, 180);
+        }
 
         _httpClient = new HttpClient
         {
             BaseAddress = new Uri(bridgeUrl),
-            Timeout = TimeSpan.FromSeconds(20)
+            Timeout = TimeSpan.FromSeconds(timeoutSeconds)
         };
     }
 

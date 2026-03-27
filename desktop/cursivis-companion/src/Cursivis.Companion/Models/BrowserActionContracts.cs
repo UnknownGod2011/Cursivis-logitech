@@ -166,6 +166,14 @@ public sealed class BrowserAnswerKeyEntry
 
     [JsonPropertyName("option")]
     public string Option { get; set; } = string.Empty;
+
+    [JsonPropertyName("questionIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? QuestionIndex { get; set; }
+
+    [JsonPropertyName("choiceIndex")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ChoiceIndex { get; set; }
 }
 
 public sealed class BrowserExecutionRequest

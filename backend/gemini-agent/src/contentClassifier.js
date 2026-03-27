@@ -838,7 +838,8 @@ export function buildPrompt({
         ? [
             "Solve the selected question set / MCQ form and return a clean answer key.",
             "For each answerable question, output: Q<number> [short question label]: <best answer option/text> - <very short reason>.",
-            "If a question asks for personal or user-specific information that cannot be inferred from the selection, output: Q<number> [short question label]: Needs user input.",
+            "For factual, scientific, explanatory, definitional, or otherwise objective short-answer questions, provide the best direct answer text instead of leaving it blank.",
+            "Only if a question asks for truly personal or user-specific information that cannot be inferred from the selection, output: Q<number> [short question label]: Needs user input.",
             "Do not answer personal prompts as the AI itself.",
             "Keep each explanation very short and practical.",
             "Do not tell the user to search the web or do more research unless explicitly asked.",

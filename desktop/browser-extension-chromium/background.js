@@ -1,7 +1,9 @@
 const HOST_NAME = "com.cursivis.browser_bridge";
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS = 90000;
 const DIRECT_BRIDGE_URL = "http://127.0.0.1:48830";
 const HTTP_RECONNECT_DELAY_MS = 3000;
+const KEEPALIVE_ALARM_NAME = "cursivis-bridge-keepalive";
+const KEEPALIVE_INTERVAL_MINUTES = 0.5;
 
 let nativePort = null;
 let reconnectTimer = null;
@@ -21,12 +23,36 @@ chrome.runtime.onStartup.addListener(() => {
   bootstrap();
 });
 
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm?.name !== KEEPALIVE_ALARM_NAME) {
+    return;
+  }
+
+  void ensureBridgeConnection();
+});
+
 chrome.action.onClicked.addListener(async () => {
   await ensureBridgeConnection();
 });
 
 async function bootstrap() {
+  await ensureKeepAliveAlarm();
   await ensureBridgeConnection();
+}
+
+async function ensureKeepAliveAlarm() {
+  try {
+    const existing = await chrome.alarms.get(KEEPALIVE_ALARM_NAME);
+    if (existing) {
+      return;
+    }
+
+    await chrome.alarms.create(KEEPALIVE_ALARM_NAME, {
+      periodInMinutes: KEEPALIVE_INTERVAL_MINUTES
+    });
+  } catch (error) {
+    lastNativeError = error instanceof Error ? error.message : String(error);
+  }
 }
 
 async function ensureBridgeConnection() {
@@ -277,6 +303,7 @@ async function executePlan(payload) {
   const steps = Array.isArray(payload?.steps) ? payload.steps : [];
   let tab = await getActiveTab();
   const logs = [];
+  const detailLines = [];
   let executedSteps = 0;
 
   for (const step of steps) {
@@ -286,18 +313,27 @@ async function executePlan(payload) {
     }
 
     logs.push(normalized.tool);
-    tab = await executeStep(tab, normalized);
+    const execution = await executeStep(tab, normalized);
+    tab = execution.tab;
     executedSteps += 1;
+
+    if (execution.payload?.warning) {
+      detailLines.push(String(execution.payload.warning));
+    }
   }
 
   const pageContext = await collectContextFromTab(tab.id);
+  const message = detailLines.length > 0
+    ? detailLines[detailLines.length - 1]
+    : executedSteps > 0
+      ? "Applied in the current logged-in browser tab."
+      : "No browser actions were executed.";
   return {
     ok: true,
     success: true,
     executedSteps,
-    message: executedSteps > 0
-      ? "Applied in the current logged-in browser tab."
-      : "No browser actions were executed.",
+    message,
+    details: detailLines.length > 0 ? detailLines.join("\n") : undefined,
     logs,
     pageContext
   };
@@ -310,14 +346,26 @@ async function executeStep(tab, step) {
         throw new Error("navigate step requires url.");
       }
 
-      return await updateTabUrl(tab.id, step.url);
+      return {
+        tab: await updateTabUrl(tab.id, step.url),
+        payload: null
+      };
     case "open_new_tab":
-      return await createTab(step.url || "about:blank");
+      return {
+        tab: await createTab(step.url || "about:blank"),
+        payload: null
+      };
     case "switch_tab":
-      return await activateMatchingTab(step);
+      return {
+        tab: await activateMatchingTab(step),
+        payload: null
+      };
     case "wait_ms":
       await delay(step.waitMs || 250);
-      return await getTab(tab.id);
+      return {
+        tab: await getTab(tab.id),
+        payload: null
+      };
     default:
       await ensureContentScript(tab.id);
       return await executeStepInTab(tab.id, step);
@@ -345,7 +393,10 @@ async function executeStepInTab(tabId, step) {
         await waitForTabComplete(tabId, REQUEST_TIMEOUT_MS);
       }
 
-      return await getTab(tabId);
+      return {
+        tab: await getTab(tabId),
+        payload: response?.payload || null
+      };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }
@@ -380,7 +431,7 @@ async function collectContextFromTab(tabId) {
 
   return {
     ...primary,
-    visibleText: visibleParts.join(" ").slice(0, 4000),
+    visibleText: visibleParts.join(" ").slice(0, 10000),
     interactiveElements: interactiveElements.slice(0, 160)
   };
 }
@@ -625,10 +676,16 @@ function normalizeStep(step) {
     const answers = step.answers
       .map((answer) => ({
         question: typeof answer?.question === "string" && answer.question.trim() ? answer.question.trim() : undefined,
-        option: typeof answer?.option === "string" ? answer.option.trim() : ""
+        option: typeof answer?.option === "string" ? answer.option.trim() : "",
+        questionIndex: Number.isInteger(answer?.questionIndex) && answer.questionIndex > 0
+          ? answer.questionIndex
+          : undefined,
+        choiceIndex: Number.isInteger(answer?.choiceIndex) && answer.choiceIndex >= 0
+          ? answer.choiceIndex
+          : undefined
       }))
       .filter((answer) => answer.option)
-      .slice(0, 20);
+      .slice(0, 128);
 
     if (answers.length > 0) {
       normalized.answers = answers;

@@ -66,3 +66,61 @@ D) December 31`,
   assert.equal(answerKeyStep.advancePages, true);
   assert.ok(answerKeyStep.answers.some((answer) => answer.option === "February 29"));
 });
+
+test("mail reply planner uses the visible reply composer without refilling recipient or subject", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => {
+      throw new Error("Mail reply with visible composer should not call model planner.");
+    }
+  });
+
+  const plan = await planner({
+    originalText: "Hi, can you please confirm tomorrow's session?",
+    resultText: "Dear Hewen,\n\nThank you for the reminder. I'll join tomorrow.\n\nBest,\nTanush",
+    action: "draft_reply",
+    voiceCommand: "reply to this email",
+    contentType: "email",
+    browserContext: {
+      url: "https://mail.google.com/mail/u/0/#inbox/FMfcgzQ",
+      title: "Inbox - Gmail",
+      visibleText: "Reply Send Dear Hewen Best regards",
+      interactiveElements: [
+        { role: "textbox", label: "Write a reply", nameAttribute: "", type: "textbox", options: [] },
+        { role: "button", label: "Send", nameAttribute: "", type: "button", options: [] }
+      ]
+    }
+  });
+
+  assert.equal(plan.goal, "reply_to_email");
+  assert.ok(plan.steps.some((step) => step.tool === "fill_editor" && step.label === "Write a reply"));
+  assert.ok(!plan.steps.some((step) => step.tool === "fill_label" && /to recipients|subject/i.test(step.label || "")));
+  assert.ok(!plan.steps.some((step) => step.tool === "click_role" && step.name === "Reply"));
+});
+
+test("shopping planner opens amazon and flipkart comparison tabs for product-like image results", async () => {
+  const planner = createBrowserActionPlanner({
+    generateText: async () => {
+      throw new Error("Shopping task pack should use direct comparison plan.");
+    }
+  });
+
+  const plan = await planner({
+    originalText: "",
+    resultText: "A black silicone iPhone 16 cover with raised camera protection.",
+    action: "describe_image",
+    voiceCommand: "",
+    contentType: "image",
+    browserContext: {
+      url: "https://example.com/gallery",
+      title: "Product screenshot",
+      visibleText: "Compare product details and price",
+      interactiveElements: []
+    }
+  });
+
+  assert.equal(plan.goal, "compare_product_prices");
+  const openTabs = plan.steps.filter((step) => step.tool === "open_new_tab");
+  assert.equal(openTabs.length, 2);
+  assert.match(openTabs[0].url, /amazon\.in/);
+  assert.match(openTabs[1].url, /flipkart\.com/);
+});

@@ -414,6 +414,9 @@ async function executeStep(page, step, logs) {
     case "fill_placeholder":
       await page.getByPlaceholder(regexFromText(step.placeholder || step.label || "")).first().fill(step.text || "");
       return;
+    case "fill_editor":
+      await fillEditor(page, step);
+      return;
     case "type_active":
       await page.keyboard.type(step.text || "");
       return;
@@ -470,6 +473,11 @@ async function fillByLabel(page, step) {
     throw new Error("fill_label requires a label.");
   }
 
+  if (containsEditorSemanticLabel(label)) {
+    await fillEditor(page, step);
+    return;
+  }
+
   for (const candidate of expandFieldLabels(label)) {
     try {
       await page.getByLabel(regexFromText(candidate)).first().fill(text);
@@ -524,6 +532,61 @@ async function fillByLabel(page, step) {
   }
 
   throw new Error(`Unable to locate a fillable field for label: ${label}`);
+}
+
+async function fillEditor(page, step) {
+  const label = step.label || step.name || "Message";
+  const text = step.text || "";
+
+  for (const candidate of expandEditorLabels(label)) {
+    try {
+      await writeIntoLocator(page.getByLabel(regexFromText(candidate)).first(), text);
+      return;
+    } catch {
+      // Continue.
+    }
+
+    try {
+      await writeIntoLocator(page.getByRole("textbox", { name: regexFromText(candidate) }).first(), text);
+      return;
+    } catch {
+      // Continue.
+    }
+
+    const escapedLabel = escapeCssAttribute(candidate);
+    for (const selector of [
+      `[aria-label="${escapedLabel}"]`,
+      `[aria-placeholder="${escapedLabel}"]`,
+      `[data-placeholder="${escapedLabel}"]`,
+      `[title="${escapedLabel}"]`,
+      `[name="${escapedLabel}"]`,
+      `[placeholder="${escapedLabel}"]`,
+      `[contenteditable="true"][aria-label="${escapedLabel}"]`,
+      `[role="textbox"][aria-label="${escapedLabel}"]`
+    ]) {
+      const locator = page.locator(selector).first();
+      if (await locator.count().catch(() => 0)) {
+        await writeIntoLocator(locator, text);
+        return;
+      }
+    }
+  }
+
+  for (const selector of [
+    `[role="textbox"][contenteditable="true"]`,
+    `[contenteditable="true"][aria-multiline="true"]`,
+    `[contenteditable="true"]`,
+    `textarea`,
+    `[role="textbox"]`
+  ]) {
+    const locator = page.locator(selector).first();
+    if (await locator.count().catch(() => 0)) {
+      await writeIntoLocator(locator, text);
+      return;
+    }
+  }
+
+  throw new Error(`Unable to locate a rich editor for label: ${label}`);
 }
 
 async function selectOption(page, step) {
@@ -858,6 +921,14 @@ function containsMailBodyLabel(label) {
   return /message|body|compose/i.test(label);
 }
 
+function containsChatBodyLabel(label) {
+  return /chat|comment|message|reply|thread|type a message|send a message/i.test(label);
+}
+
+function containsEditorSemanticLabel(label) {
+  return containsMailBodyLabel(label) || containsChatBodyLabel(label);
+}
+
 function containsComposeLabel(label) {
   return /compose|new message|new mail/i.test(label);
 }
@@ -914,6 +985,164 @@ function expandFieldLabels(label) {
   }
 
   return values;
+}
+
+function expandEditorLabels(label) {
+  const values = expandFieldLabels(label);
+  const normalized = String(label || "").trim().toLowerCase();
+
+  if (containsEditorSemanticLabel(normalized)) {
+    pushUnique(values, "Reply");
+    pushUnique(values, "Write a reply");
+    pushUnique(values, "Type a message");
+    pushUnique(values, "Send a message");
+    pushUnique(values, "Chat");
+  }
+
+  return values;
+}
+
+async function writeIntoLocator(locator, text, { append = false } = {}) {
+  await locator.waitFor({ state: "visible", timeout: 2500 }).catch(() => {});
+  const applied = await locator.evaluate((element, payload) => {
+    const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const isContentEditable = (candidate) => candidate instanceof HTMLElement && candidate.isContentEditable;
+    const isRichText = (candidate) => {
+      if (!(candidate instanceof Element)) {
+        return false;
+      }
+
+      const tagName = candidate.tagName.toLowerCase();
+      if (tagName === "textarea" || tagName === "input" || tagName === "select") {
+        return false;
+      }
+
+      return isContentEditable(candidate) || candidate.getAttribute("role") === "textbox";
+    };
+    const readValue = (candidate) => {
+      if (!(candidate instanceof Element)) {
+        return "";
+      }
+
+      if (isContentEditable(candidate)) {
+        return normalize(candidate.textContent || candidate.innerText);
+      }
+
+      if ("value" in candidate) {
+        return normalize(candidate.value);
+      }
+
+      return normalize(candidate.textContent || candidate.innerText);
+    };
+    const dispatch = (candidate, nextText, inputType) => {
+      try {
+        candidate.dispatchEvent(new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          data: nextText,
+          inputType
+        }));
+      } catch {
+        // Ignore.
+      }
+
+      try {
+        candidate.dispatchEvent(new InputEvent("input", {
+          bubbles: true,
+          data: nextText,
+          inputType
+        }));
+      } catch {
+        candidate.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      candidate.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    const setNativeValue = (candidate, nextValue) => {
+      const prototype =
+        candidate instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : candidate instanceof HTMLInputElement
+            ? HTMLInputElement.prototype
+            : candidate instanceof HTMLSelectElement
+              ? HTMLSelectElement.prototype
+              : null;
+
+      const setter = prototype
+        ? Object.getOwnPropertyDescriptor(prototype, "value")?.set
+        : null;
+
+      if (setter) {
+        setter.call(candidate, nextValue);
+        return;
+      }
+
+      candidate.value = nextValue;
+    };
+    const writePlainText = (candidate, nextText) => {
+      while (candidate.firstChild) {
+        candidate.removeChild(candidate.firstChild);
+      }
+
+      const lines = String(nextText || "").split(/\r?\n/);
+      lines.forEach((line, index) => {
+        if (index > 0) {
+          candidate.appendChild(document.createElement("br"));
+        }
+
+        candidate.appendChild(document.createTextNode(line));
+      });
+    };
+
+    if (!(element instanceof Element)) {
+      return false;
+    }
+
+    const currentValue = readValue(element);
+    const nextValue = payload.append ? `${currentValue}${payload.text}` : payload.text;
+    element.focus?.();
+
+    if (isRichText(element)) {
+      let inserted = false;
+      try {
+        if (typeof document.execCommand === "function") {
+          const selection = window.getSelection?.();
+          if (selection) {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+
+          inserted = document.execCommand("insertText", false, nextValue);
+        }
+      } catch {
+        inserted = false;
+      }
+
+      if (!inserted) {
+        writePlainText(element, nextValue);
+      }
+
+      dispatch(element, nextValue, payload.append ? "insertText" : "insertReplacementText");
+      return readValue(element).includes(normalize(nextValue));
+    }
+
+    if ("value" in element) {
+      setNativeValue(element, nextValue);
+      dispatch(element, nextValue, payload.append ? "insertText" : "insertReplacementText");
+      return readValue(element).includes(normalize(nextValue));
+    }
+
+    return false;
+  }, {
+    text,
+    append
+  });
+
+  if (!applied) {
+    throw new Error("The target editor did not accept the generated text.");
+  }
 }
 
 async function clickByRole(page, step) {
