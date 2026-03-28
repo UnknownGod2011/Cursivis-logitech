@@ -205,7 +205,30 @@ function isLikelyForeignLanguageText(text) {
     return false;
   }
 
-  return /[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(text);
+  if (/[\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF\u0900-\u097F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(text)) {
+    return true;
+  }
+
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  const accentedWordMatches =
+    normalized.match(/\b[^\s]*[àáâãäåæçèéêëìíîïñòóôõöøœùúûüýÿ][^\s]*\b/gi)?.length ?? 0;
+
+  const foreignCueMatches =
+    normalized.match(/\b(?:bonjour|merci|pour|avec|dans|mais|vous|nous|leur|leurs|sont|comme|sans|depuis|toujours|notre|votre|réunion|demain|matin|veuillez|consulter|préparer|nécessaires|déplacement|gracias|hola|porque|cuando|donde|usted|ustedes|para|pero|aunque|mientras|hallo|danke|nicht|eine|einen|dieser|diese|dass|ciao|grazie|quando|dove)\b/gi)?.length ?? 0;
+  const englishCueMatches =
+    normalized.match(/\b(?:the|and|that|this|with|from|your|have|will|would|there|their|about|which|these|those|into|while|please|thanks|thank|because|where|when)\b/gi)?.length ?? 0;
+
+  if (foreignCueMatches >= 3 && foreignCueMatches > englishCueMatches) {
+    return true;
+  }
+
+  return accentedWordMatches >= 3 &&
+    foreignCueMatches >= 1 &&
+    englishCueMatches <= foreignCueMatches + 1;
 }
 
 function formatDateForPrompt(date = new Date()) {
@@ -797,6 +820,18 @@ export function normalizeIntentDecision(routerOutput, selectionText = "") {
     bestAction = "translate";
   }
 
+  if (
+    isLikelyForeignLanguageText(selectionText) &&
+    (normalizedType === "general_text" || normalizedType === "report") &&
+    (bestAction === "summarize" ||
+      bestAction === "rewrite" ||
+      bestAction === "rewrite_structured" ||
+      bestAction === "extract_insights" ||
+      bestAction === "bullet_points")
+  ) {
+    bestAction = "translate";
+  }
+
   const alternatives = [bestAction, ...normalizedAlternatives, ...alternativesForType(normalizedType)]
     .filter(Boolean)
     .filter((value, index, array) => array.indexOf(value) === index)
@@ -1027,6 +1062,18 @@ export function buildPrompt({
         text
       ].join("\n\n");
     default:
+      if (normalizedType === "report" && normalizedAction.startsWith("extract_")) {
+        return [
+          `Perform this focused extraction on the text: ${normalizedAction.replaceAll("_", " ")}.`,
+          "Prioritize the requested focus first.",
+          "Also include any other materially important requirements, constraints, obligations, risks, or decisions needed to understand the selection properly.",
+          "Do not omit critical context just because it falls outside the main focus.",
+          "Return a compact structured list, and add 'Other important points' only when needed.",
+          "Text:",
+          text
+        ].join("\n\n");
+      }
+
       return [
         `Perform this operation on the text: ${normalizedAction.replaceAll("_", " ")}.`,
         "Return concise, practical output only.",

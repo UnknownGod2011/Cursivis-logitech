@@ -10,11 +10,13 @@ import { createApp } from "../src/app.js";
 import { createBrowserActionPlanner } from "../src/browserActionPlanner.js";
 import { detectBrowserTaskPack } from "../src/browserTaskPacks.js";
 import {
+  buildPrompt,
   describeIntentRoutingConcern,
   inferFallbackType,
   inferUsefulCodeAction,
   inferUsefulEmailAction,
-  looksLikeQuestionSet
+  looksLikeQuestionSet,
+  normalizeIntentDecision
 } from "../src/contentClassifier.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -844,6 +846,71 @@ test("long informational text is flagged for Gemini re-evaluation when routed as
   );
 
   assert.match(concern, /informational prose, not a direct question/i);
+});
+
+test("custom report extract prompt stays focused but preserves critical surrounding context", () => {
+  const sample = `UPDATE, March 23rd: We have extended the submission deadline for the second phase from April 1st to April 22nd. Finalists are required to travel to Switzerland for the final event and must be capable of obtaining the appropriate visa and travel documents in time. Participants should review prize eligibility, submission requirements, and travel conditions carefully before continuing.`;
+
+  const prompt = buildPrompt({
+    text: sample,
+    action: "extract_deadlines",
+    contentType: "report"
+  });
+
+  assert.match(prompt, /Prioritize the requested focus first\./i);
+  assert.match(prompt, /Do not omit critical context just because it falls outside the main focus\./i);
+  assert.match(prompt, /materially important requirements, constraints, obligations, risks, or decisions/i);
+});
+
+test("long foreign-language prose normalizes summarize to translate", () => {
+  const sample = "Bonjour, merci pour votre message. Nous vous écrivons pour confirmer que la réunion finale aura lieu demain matin à 9h. Veuillez consulter les conditions de participation et préparer vos documents nécessaires avant le déplacement.";
+
+  const normalized = normalizeIntentDecision(
+    {
+      contentType: "report",
+      bestAction: "summarize",
+      confidence: 0.79,
+      alternatives: ["summarize", "extract_insights", "bullet_points"]
+    },
+    sample
+  );
+
+  assert.equal(normalized.contentType, "report");
+  assert.equal(normalized.bestAction, "translate");
+});
+
+test("english reference prose with a few foreign etymology terms does not misclassify as translate", () => {
+  const sample = "The scientific name Ornithorhynchus anatinus literally means duck-like bird-snout, deriving its genus name from the Greek root ornith- (ornis bird) and the word rhunkhos (snout, beak). Its species name is derived from Latin anatinus (duck-like) from anas duck. The platypus is the sole living representative of its family.";
+
+  const normalized = normalizeIntentDecision(
+    {
+      contentType: "report",
+      bestAction: "summarize",
+      confidence: 0.8,
+      alternatives: ["summarize", "extract_insights", "bullet_points"]
+    },
+    sample
+  );
+
+  assert.equal(normalized.contentType, "report");
+  assert.equal(normalized.bestAction, "summarize");
+});
+
+test("foreign-language email actions are not overridden to translate when already email-specific", () => {
+  const sample = "Objet : réunion demain\n\nBonjour Marie,\nMerci pour votre message. Pouvez-vous confirmer votre disponibilité pour demain matin ?\n\nBien cordialement,";
+
+  const normalized = normalizeIntentDecision(
+    {
+      contentType: "email",
+      bestAction: "draft_reply",
+      confidence: 0.8,
+      alternatives: ["draft_reply", "polish_email", "translate"]
+    },
+    sample
+  );
+
+  assert.equal(normalized.contentType, "email");
+  assert.equal(normalized.bestAction, "draft_reply");
 });
 
 test("browser planner falls back to Gmail compose steps for email actions", async () => {
