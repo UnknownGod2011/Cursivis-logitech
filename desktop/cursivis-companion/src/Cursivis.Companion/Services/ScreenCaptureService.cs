@@ -1,3 +1,4 @@
+using Cursivis.Companion.Infrastructure;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -70,22 +71,19 @@ public sealed class ScreenCaptureService
 
     private static System.Windows.Int32Rect BuildCursorContextRegion(System.Windows.Point cursor, int width, int height)
     {
-        var virtualLeft = (int)Math.Round(SystemParameters.VirtualScreenLeft);
-        var virtualTop = (int)Math.Round(SystemParameters.VirtualScreenTop);
-        var virtualWidth = (int)Math.Round(SystemParameters.VirtualScreenWidth);
-        var virtualHeight = (int)Math.Round(SystemParameters.VirtualScreenHeight);
-        if (virtualWidth <= 0 || virtualHeight <= 0)
+        var virtualScreen = NativeMethods.GetVirtualScreenBounds();
+        if (virtualScreen.Width <= 0 || virtualScreen.Height <= 0)
         {
             return default;
         }
 
         var x = (int)Math.Round(cursor.X - (width / 2.0));
         var y = (int)Math.Round(cursor.Y - (height / 2.0));
-        var maxX = virtualLeft + virtualWidth - width;
-        var maxY = virtualTop + virtualHeight - height;
+        var maxX = virtualScreen.X + virtualScreen.Width - width;
+        var maxY = virtualScreen.Y + virtualScreen.Height - height;
 
-        x = Math.Max(virtualLeft, Math.Min(x, maxX));
-        y = Math.Max(virtualTop, Math.Min(y, maxY));
+        x = Math.Max(virtualScreen.X, Math.Min(x, maxX));
+        y = Math.Max(virtualScreen.Y, Math.Min(y, maxY));
 
         return NormalizeRegionToVirtualScreen(new System.Windows.Int32Rect(x, y, width, height));
     }
@@ -97,10 +95,16 @@ public sealed class ScreenCaptureService
             return default;
         }
 
-        var virtualLeft = (int)Math.Round(SystemParameters.VirtualScreenLeft);
-        var virtualTop = (int)Math.Round(SystemParameters.VirtualScreenTop);
-        var virtualRight = virtualLeft + (int)Math.Round(SystemParameters.VirtualScreenWidth);
-        var virtualBottom = virtualTop + (int)Math.Round(SystemParameters.VirtualScreenHeight);
+        var virtualScreen = NativeMethods.GetVirtualScreenBounds();
+        if (virtualScreen.Width <= 0 || virtualScreen.Height <= 0)
+        {
+            return default;
+        }
+
+        var virtualLeft = virtualScreen.X;
+        var virtualTop = virtualScreen.Y;
+        var virtualRight = virtualScreen.X + virtualScreen.Width;
+        var virtualBottom = virtualScreen.Y + virtualScreen.Height;
 
         var x = Math.Max(virtualLeft, region.X);
         var y = Math.Max(virtualTop, region.Y);

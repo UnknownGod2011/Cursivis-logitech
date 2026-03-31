@@ -5,6 +5,10 @@ namespace Cursivis.Companion.Infrastructure;
 
 public static class NativeMethods
 {
+    private const int SmXvirtualscreen = 76;
+    private const int SmYvirtualscreen = 77;
+    private const int SmCxvirtualscreen = 78;
+    private const int SmCyvirtualscreen = 79;
     private const int KeyeventfKeyup = 0x0002;
     private const int MouseeventfLeftdown = 0x0002;
     private const int MouseeventfLeftup = 0x0004;
@@ -58,6 +62,9 @@ public static class NativeMethods
     [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
 
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
     public static System.Windows.Point GetCursorPosition()
     {
         if (!GetCursorPos(out var point))
@@ -76,6 +83,18 @@ public static class NativeMethods
     public static uint GetCurrentClipboardSequenceNumber()
     {
         return GetClipboardSequenceNumber();
+    }
+
+    public static System.Windows.Int32Rect GetVirtualScreenBounds()
+    {
+        var left = GetSystemMetrics(SmXvirtualscreen);
+        var top = GetSystemMetrics(SmYvirtualscreen);
+        var width = GetSystemMetrics(SmCxvirtualscreen);
+        var height = GetSystemMetrics(SmCyvirtualscreen);
+
+        return width <= 0 || height <= 0
+            ? default
+            : new System.Windows.Int32Rect(left, top, width, height);
     }
 
     public static void BringToFront(IntPtr handle)
