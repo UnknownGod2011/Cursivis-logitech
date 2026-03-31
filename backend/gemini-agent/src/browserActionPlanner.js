@@ -632,13 +632,16 @@ function extractQuestionLabel(sourceText = "") {
 }
 
 function extractOptionTexts(sourceText = "") {
+  const normalizeVisibleOptionText = (line = "") => {
+    const trimmed = String(line || "").trim();
+    const match = trimmed.match(/^(?:[a-d]|\d+)[\).:-]\s+(.+)$/i);
+    return match?.[1]?.trim() || "";
+  };
+
   return String(sourceText)
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .map((line) => {
-      const match = line.match(/^(?:[a-d]|\d+)[\).:-]\s+(.+)$/i);
-      return match?.[1]?.trim() || "";
-    })
+    .map((line) => normalizeVisibleOptionText(line))
     .filter(Boolean)
     .slice(0, 12);
 }
@@ -722,6 +725,12 @@ function extractLeadingQuestionMarker(line = "") {
 }
 
 function parseSelectionQuestionBlocks(sourceText = "") {
+  const normalizeVisibleOptionText = (line = "") => {
+    const trimmed = String(line || "").trim();
+    const match = trimmed.match(/^(?:[a-d]|\d+)[\).:-]\s+(.+)$/i);
+    return match?.[1]?.trim() || trimmed;
+  };
+
   const lines = String(sourceText)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -762,7 +771,7 @@ function parseSelectionQuestionBlocks(sourceText = "") {
       continue;
     }
 
-    currentBlock.optionTexts.push(line);
+    currentBlock.optionTexts.push(normalizeVisibleOptionText(line));
   }
 
   return blocks;

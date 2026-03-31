@@ -9,6 +9,11 @@ namespace Cursivis.Companion.Services;
 
 public sealed class GeminiClient : IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private static readonly Regex CodeKeywordRegex = new(@"\b(function|class|const|let|var|public|private|protected|return|if\s*\(|for\s*\(|while\s*\(|try|catch|throw|await|async|import|export|console\.log|print\s*\(|SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CodeInlineFeatureRegex = new(@"(=>|==={0,1}|!==|::|</?[a-z][^>]*>|#include\b|using\s+[A-Z][A-Za-z0-9_.]+;)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CodePunctuationFeatureRegex = new(@"[{};]", RegexOptions.Compiled);
@@ -165,7 +170,7 @@ public sealed class GeminiClient : IDisposable
             throw new InvalidOperationException(FormatBackendError(response.StatusCode, body));
         }
 
-        var parsed = JsonSerializer.Deserialize<TranscribeResponse>(body);
+        var parsed = JsonSerializer.Deserialize<TranscribeResponse>(body, JsonOptions);
         if (parsed is null || string.IsNullOrWhiteSpace(parsed.Text))
         {
             return null;

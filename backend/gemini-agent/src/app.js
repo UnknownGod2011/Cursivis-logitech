@@ -789,6 +789,10 @@ export function createApp({ textGenerator, intentRouter, optionGenerator, browse
     const startedAt = Date.now();
     try {
       const generated = await generateText({
+        modelOverride:
+          process.env.GEMINI_TRANSCRIBE_MODEL ||
+          process.env.GEMINI_MODEL ||
+          "gemini-2.5-flash",
         contents: [
           {
             role: "user",
@@ -797,7 +801,8 @@ export function createApp({ textGenerator, intentRouter, optionGenerator, browse
                 text: [
                   "Transcribe this spoken command accurately.",
                   "Return only the transcribed command text.",
-                  "No extra commentary."
+                  "No extra commentary.",
+                  "Do not describe the audio or say that you are transcribing it."
                 ].join("\n")
               },
               {
@@ -808,10 +813,18 @@ export function createApp({ textGenerator, intentRouter, optionGenerator, browse
               }
             ]
           }
-        ]
+        ],
+        config: {
+          systemInstruction: [
+            "You are a speech-to-text transcriber for Cursivis.",
+            "Transcribe the spoken command accurately.",
+            "Return only the spoken words as plain text.",
+            "Do not summarize, explain, label, or add commentary."
+          ].join(" ")
+        }
       });
 
-      const text = sanitizeResultText(generated.text, "transcribe");
+      const text = sanitizeTranscriptionText(generated.text);
       return res.json({
         text,
         latencyMs: generated.latencyMs ?? Date.now() - startedAt,
@@ -934,6 +947,28 @@ function sanitizeResultText(text, action = "summarize") {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
+
+  return cleaned;
+}
+
+function sanitizeTranscriptionText(text) {
+  if (!text || !text.trim()) {
+    return "";
+  }
+
+  let cleaned = text
+    .replace(/\u0000/g, "")
+    .replace(/\r/g, "")
+    .replace(/^```[\w-]*\n?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+
+  cleaned = cleaned
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/^here('| i)?s\s+(the\s+)?(transcribed|spoken)\s+(command|text)\s*[:\-]?\s*/i, "")
+    .replace(/^(transcribed|spoken)\s+(command|text)\s*[:\-]?\s*/i, "")
+    .replace(/^transcription\s*[:\-]?\s*/i, "")
+    .trim();
 
   return cleaned;
 }

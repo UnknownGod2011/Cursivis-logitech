@@ -174,27 +174,57 @@ public sealed class TriggerController : IDisposable
     {
         var selectionSource = ResolveSelectionSource();
         _orbOverlayWindow.MoveToTopRight();
-        _orbOverlayWindow.SetState(
-            OrbState.Listening,
-            cancellationToken.CanBeCanceled ? "Listening... release to send" : "Listening... speak your command");
         EnsureWindowVisible(_orbOverlayWindow);
         _lastExternalWindow = selectionSource.WindowHandle;
 
-        var voiceCommand = await _voiceCommandPromptService.PromptAsync(
-            (state, message) => _orbOverlayWindow.SetState(state, message),
-            level => _orbOverlayWindow.SetListeningLevel(level),
-            cancellationToken);
-        if (string.IsNullOrWhiteSpace(voiceCommand))
+        try
         {
-            _orbOverlayWindow.SetState(OrbState.Idle, "Voice command canceled");
-            return;
+            var voiceCommand = await PromptVoiceCommandFromOrbAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(voiceCommand))
+            {
+                _orbOverlayWindow.SetState(OrbState.Idle, "Voice command canceled");
+                return;
+            }
+
+            await HandleTapAsync(
+                CancellationToken.None,
+                voiceCommand,
+                forceActionMenu: false,
+                selectionSource.WindowHandle != IntPtr.Zero ? selectionSource : null);
+        }
+        finally
+        {
+            _orbOverlayWindow.SetListeningLevel(0);
+        }
+    }
+
+    private async Task<string?> PromptVoiceCommandFromOrbAsync(CancellationToken cancellationToken)
+    {
+        using var stopRecordingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        void OnListeningStopRequested(object? sender, EventArgs e)
+        {
+            if (!stopRecordingCts.IsCancellationRequested)
+            {
+                stopRecordingCts.Cancel();
+            }
         }
 
-        await HandleTapAsync(
-            CancellationToken.None,
-            voiceCommand,
-            forceActionMenu: false,
-            selectionSource.WindowHandle != IntPtr.Zero ? selectionSource : null);
+        _orbOverlayWindow.ListeningStopRequested += OnListeningStopRequested;
+        _orbOverlayWindow.SetState(OrbState.Listening, "Recording... tap stop");
+        EnsureWindowVisible(_orbOverlayWindow);
+
+        try
+        {
+            return await _voiceCommandPromptService.PromptAsync(
+                (state, message) => _orbOverlayWindow.SetState(state, message),
+                level => _orbOverlayWindow.SetListeningLevel(level),
+                stopRecordingCts.Token);
+        }
+        finally
+        {
+            _orbOverlayWindow.ListeningStopRequested -= OnListeningStopRequested;
+            _orbOverlayWindow.SetListeningLevel(0);
+        }
     }
 
     public void HandleDialTick(int delta)
@@ -491,8 +521,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {ToDisplayAction(actionHint).ToLowerInvariant()}...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.Value.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {displayAction.ToLowerInvariant()}...");
         }
         else
         {
@@ -609,7 +640,7 @@ public sealed class TriggerController : IDisposable
                 : "Result copied to clipboard");
 
         _resultPanelWindow.ShowResult(
-            ToDisplayAction(response.Action),
+            ResolveResultDisplayAction(response, context),
             didAutoReplace
                 ? $"{response.Result}\n\n[Auto-replaced in app. Press Ctrl+Z in target app to undo.]"
                 : response.Result,
@@ -791,8 +822,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Analyzing image ({ToDisplayAction(actionHint)})...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.Value.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Analyzing image ({displayAction})...");
         }
         else
         {
@@ -847,16 +879,13 @@ public sealed class TriggerController : IDisposable
 
             if (string.Equals(selectedOption, CustomVoiceCommandOption, StringComparison.OrdinalIgnoreCase))
             {
-                var customVoice = await _voiceCommandPromptService.PromptAsync(
-                    (state, message) => _orbOverlayWindow.SetState(state, message),
-                    level => _orbOverlayWindow.SetListeningLevel(level),
-                    cancellationToken);
+                var customVoice = await PromptVoiceCommandFromOrbAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(customVoice))
                 {
                     return null;
                 }
 
-                return new ActionDecision(null, customVoice, bestAction);
+                return new ActionDecision(null, customVoice, "Custom Task");
             }
 
             if (selectedOption.StartsWith(AiSuggestPrefix, StringComparison.OrdinalIgnoreCase))
@@ -870,7 +899,10 @@ public sealed class TriggerController : IDisposable
 
         // Smart mode: use Gemini's routed best action as the execution hint so the same decision is carried through.
         var smartAction = string.IsNullOrWhiteSpace(bestAction) ? null : NormalizeActionHint(bestAction);
-        return new ActionDecision(smartAction, voiceCommand, smartAction);
+        var displayAction = string.IsNullOrWhiteSpace(voiceCommand)
+            ? smartAction
+            : ResolveExecutionDisplayAction(smartAction, voiceCommand);
+        return new ActionDecision(smartAction, voiceCommand, displayAction);
     }
 
     private Task<GuidedMenuOptions> BuildActionMenuOptionsAsync(SuggestionResponse suggestion, CancellationToken cancellationToken)
@@ -1823,8 +1855,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {ToDisplayAction(actionHint).ToLowerInvariant()}...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {displayAction.ToLowerInvariant()}...");
         }
         else if (!string.IsNullOrWhiteSpace(decision.DisplayAction))
         {
@@ -2139,6 +2172,41 @@ public sealed class TriggerController : IDisposable
             "ocr_extract_text" => "OCR Extract Text",
             "extract_table_data" => "Extract Table Data",
             var x => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(x.Replace("_", " ", StringComparison.Ordinal))
+        };
+    }
+
+    private static string ResolveExecutionDisplayAction(string? actionHint, string? voiceCommand)
+    {
+        if (!string.IsNullOrWhiteSpace(voiceCommand) && IsBroadVoiceTaskAction(actionHint))
+        {
+            return "Custom Task";
+        }
+
+        return ToDisplayAction(actionHint ?? "summarize");
+    }
+
+    private static string ResolveResultDisplayAction(AgentResponse response, CapturedSelectionContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(context.VoiceCommand) && IsBroadVoiceTaskAction(response.Action))
+        {
+            return "Custom Task";
+        }
+
+        return ToDisplayAction(response.Action);
+    }
+
+    private static bool IsBroadVoiceTaskAction(string? actionHint)
+    {
+        return NormalizeActionHint(actionHint ?? string.Empty) switch
+        {
+            "summarize" => true,
+            "extract_insights" => true,
+            "bullet_points" => true,
+            "rewrite" => true,
+            "rewrite_structured" => true,
+            "expand_text" => true,
+            "explain" => true,
+            _ => false
         };
     }
 

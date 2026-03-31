@@ -91,6 +91,8 @@ public partial class OrbOverlayWindow : Window
 
     public event EventHandler<int>? ModeStepRequested;
 
+    public event EventHandler? ListeningStopRequested;
+
     public bool IsMenuVisible => _isMenuMode && _menuOptions.Count > 0;
 
     public string CurrentIdleCommand => _idleCommands[_idleCommandIndex];
@@ -132,6 +134,8 @@ public partial class OrbOverlayWindow : Window
         _currentState = state;
         StateText.Text = state == OrbState.Idle ? _modeDisplay : state.ToString();
         StatusText.Text = status;
+        ListeningStopButton.Visibility = state == OrbState.Listening ? Visibility.Visible : Visibility.Collapsed;
+        ListeningStopButton.IsHitTestVisible = state == OrbState.Listening;
         ApplyPalette(state);
 
         switch (state)
@@ -580,6 +584,12 @@ public partial class OrbOverlayWindow : Window
     private void IdleRunButton_OnClick(object sender, RoutedEventArgs e)
     {
         IdleCommandInvoked?.Invoke(this, _idleCommands[_idleCommandIndex]);
+    }
+
+    private void ListeningStopButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        ListeningStopRequested?.Invoke(this, EventArgs.Empty);
+        e.Handled = true;
     }
 
     private void AnimateBaseScale(double targetScale)
