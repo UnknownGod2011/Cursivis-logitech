@@ -19,9 +19,13 @@ public partial class App : Application
     private TriggerController? _triggerController;
     private OrbOverlayWindow? _orbOverlayWindow;
     private ResultPanelWindow? _resultPanelWindow;
+    private MainWindow? _mainWindow;
     private TriggerIpcServer? _triggerIpcServer;
     private HapticEventHub? _hapticEventHub;
     private SettingsService? _settingsService;
+    private GlobalMouseWheelService? _globalMouseWheelService;
+    private bool _showOrbDuringWorkflow = true;
+    private TakeActionPromptPreference _takeActionPromptPreference = TakeActionPromptPreference.AlwaysAskToRun;
     private CancellationTokenSource? _ipcLongPressCts;
     private Task? _ipcLongPressTask;
 
@@ -45,8 +49,16 @@ public partial class App : Application
         try
         {
             _settingsService = new SettingsService();
-            var mode = await _settingsService.TryLoadModeAsync() ?? InteractionMode.Smart;
-            await _settingsService.SaveModeAsync(mode);
+            var savedSettings = await _settingsService.TryLoadSettingsAsync()
+                ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+            var mode = savedSettings.Mode;
+            _showOrbDuringWorkflow = savedSettings.ShowOrbDuringWorkflow;
+            _takeActionPromptPreference = savedSettings.TakeActionPromptPreference;
+            await _settingsService.SaveSettingsAsync(savedSettings);
+
+            var backgroundLaunch = e.Args.Any(arg => string.Equals(arg, "--background", StringComparison.OrdinalIgnoreCase));
+            var runtimeBootstrapper = new RuntimeBootstrapper();
+            await runtimeBootstrapper.EnsureRuntimeReadyAsync(CancellationToken.None);
 
             var clipboardService = new ClipboardService();
             var intentMemoryService = new IntentMemoryService();
@@ -80,11 +92,19 @@ public partial class App : Application
                 _windowFocusTracker,
                 intentMemoryService,
                 mode);
+            _triggerController.SetShowOrbDuringWorkflow(_showOrbDuringWorkflow);
+            _triggerController.SetTakeActionPromptPreference(_takeActionPromptPreference);
 
-            var mainWindow = new MainWindow(_triggerController, _settingsService, mode);
-            MainWindow = mainWindow;
+            _mainWindow = new MainWindow(_triggerController, _settingsService, savedSettings);
+            MainWindow = _mainWindow;
 
-            _windowFocusTracker.RegisterCompanionWindow(mainWindow);
+            if (backgroundLaunch)
+            {
+                _mainWindow.Opacity = 0;
+                _mainWindow.ShowInTaskbar = false;
+            }
+
+            _windowFocusTracker.RegisterCompanionWindow(_mainWindow);
             _windowFocusTracker.RegisterCompanionWindow(_orbOverlayWindow);
             _windowFocusTracker.RegisterCompanionWindow(_resultPanelWindow);
             _windowFocusTracker.ExternalWindowActivated += (_, _) =>
@@ -92,17 +112,21 @@ public partial class App : Application
                 Dispatcher.Invoke(() =>
                 {
                     _triggerController?.CollapseTransientUi();
-                    if (mainWindow.IsVisible)
+                    if (_mainWindow?.IsVisible == true)
                     {
-                        mainWindow.Hide();
+                        _mainWindow.Hide();
                     }
                 });
             };
 
-            _orbOverlayWindow.Show();
-            _resultPanelWindow.Show();
-            _resultPanelWindow.Hide();
-            mainWindow.Show();
+            _globalMouseWheelService = new GlobalMouseWheelService();
+            _globalMouseWheelService.WheelMoved += GlobalMouseWheelServiceOnWheelMoved;
+            _globalMouseWheelService.Start();
+
+            if (!backgroundLaunch)
+            {
+                _mainWindow.Show();
+            }
 
             _cursorTracker.Start();
             _windowFocusTracker.Start();
@@ -167,6 +191,11 @@ public partial class App : Application
         }
 
         _hapticEventHub?.Dispose();
+        if (_globalMouseWheelService is not null)
+        {
+            _globalMouseWheelService.WheelMoved -= GlobalMouseWheelServiceOnWheelMoved;
+            _globalMouseWheelService.Dispose();
+        }
         CancelIpcLongPress();
 
         if (_singleInstanceMutex is not null)
@@ -209,6 +238,15 @@ public partial class App : Application
                     case "tap":
                         _ = _triggerController.HandleTapAsync(CancellationToken.None);
                         break;
+                    case "action":
+                        _ = _triggerController.HandleDirectTakeActionAsync(CancellationToken.None);
+                        break;
+                    case "snip-it":
+                        _ = _triggerController.HandleImageSelectionAsync(CancellationToken.None);
+                        break;
+                    case "settings":
+                        ShowSettingsWindow();
+                        break;
                     case "long_press":
                         _ = _triggerController.HandleLongPressAsync(CancellationToken.None);
                         break;
@@ -231,6 +269,28 @@ public partial class App : Application
         {
             // Keep app running even if an external IPC event is malformed.
         }
+    }
+
+    private void ShowSettingsWindow()
+    {
+        if (_mainWindow is null)
+        {
+            return;
+        }
+
+        _mainWindow.Opacity = 1;
+        _mainWindow.ShowInTaskbar = true;
+
+        if (!_mainWindow.IsVisible)
+        {
+            _mainWindow.Show();
+        }
+
+        _mainWindow.WindowState = WindowState.Normal;
+        _mainWindow.Topmost = true;
+        _mainWindow.Activate();
+        _mainWindow.Focus();
+        _mainWindow.Topmost = true;
     }
 
     private void StartIpcLongPress()
@@ -304,6 +364,16 @@ public partial class App : Application
     private async void TriggerControllerOnProcessingComplete(object? sender, EventArgs e)
     {
         await PublishHapticAsync("processing_complete", "strong");
+    }
+
+    private void GlobalMouseWheelServiceOnWheelMoved(object? sender, GlobalMouseWheelEventArgs e)
+    {
+        if (_triggerController is null)
+        {
+            return;
+        }
+
+        e.Handled = _triggerController.HandleExternalScrollWheel(e.DeltaStep);
     }
 
     private async Task PublishHapticAsync(string hapticType, string intensity, params (string Key, string Value)[] metadataEntries)

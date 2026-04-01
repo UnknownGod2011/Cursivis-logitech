@@ -5,7 +5,7 @@ namespace Loupedeck.CursivisPlugin
     public class CursivisLongPressCommand : PluginDynamicCommand
     {
         public CursivisLongPressCommand()
-            : base(displayName: "Cursivis Long Press", description: "Send long press trigger to companion", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
+            : base(displayName: "Cursivis Talk", description: "Start voice command capture in companion", groupName: "Cursivis", supportedDevices: DeviceType.LoupedeckExtendedFamily)
         {
         }
 

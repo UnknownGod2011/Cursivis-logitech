@@ -1,10 +1,10 @@
 {
-  "backgroundColor": 4279507000,
+  "backgroundColor": 4280098071,
   "items": [
     {
-      "text": "GO",
-      "textColor": 4289784063,
-      "fontSize": 28,
+      "text": "ACT",
+      "textColor": 4294967295,
+      "fontSize": 26,
       "fontName": "Brown Logitech Pan Bold",
       "isVisible": true,
       "itemType": "Text",

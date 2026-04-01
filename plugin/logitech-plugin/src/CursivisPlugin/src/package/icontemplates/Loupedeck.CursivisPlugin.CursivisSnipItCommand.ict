@@ -1,17 +1,17 @@
 {
-  "backgroundColor": 4279507000,
+  "backgroundColor": 4281732918,
   "items": [
     {
-      "text": "GO",
-      "textColor": 4289784063,
-      "fontSize": 28,
+      "text": "SNIP",
+      "textColor": 4294967295,
+      "fontSize": 20,
       "fontName": "Brown Logitech Pan Bold",
       "isVisible": true,
       "itemType": "Text",
       "area": {
-        "x": 10,
+        "x": 6,
         "y": 24,
-        "width": 84,
+        "width": 88,
         "height": 36
       }
     }

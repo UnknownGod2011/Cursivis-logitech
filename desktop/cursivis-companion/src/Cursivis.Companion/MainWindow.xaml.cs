@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private readonly TriggerController _triggerController;
     private readonly SettingsService _settingsService;
     private readonly LogitechRuntimeStatusService _logitechRuntimeStatusService;
+    private readonly RuntimeLaunchProfileService _runtimeLaunchProfileService;
+    private readonly GeminiClient _runtimeGeminiClient;
     private int _lastDialValue;
     private bool _suppressDialEvents;
     private bool _isModeInitialized;
@@ -29,22 +31,34 @@ public partial class MainWindow : Window
     private Task? _longPressHoldTask;
     private HwndSource? _hwndSource;
     private readonly DispatcherTimer _logitechStatusTimer;
+    private bool _showOrbDuringWorkflow;
+    private TakeActionPromptPreference _takeActionPromptPreference;
+    private bool _isUpdatingApiKey;
 
-    public MainWindow(TriggerController triggerController, SettingsService settingsService, InteractionMode initialMode)
+    public MainWindow(TriggerController triggerController, SettingsService settingsService, CompanionSettings initialSettings)
     {
         _triggerController = triggerController;
         _settingsService = settingsService;
         _logitechRuntimeStatusService = new LogitechRuntimeStatusService();
+        _runtimeLaunchProfileService = new RuntimeLaunchProfileService();
+        _runtimeGeminiClient = new GeminiClient();
+        _showOrbDuringWorkflow = initialSettings.ShowOrbDuringWorkflow;
+        _takeActionPromptPreference = initialSettings.TakeActionPromptPreference;
         InitializeComponent();
 
         _triggerController.OnActionChange += TriggerControllerOnActionChange;
         _triggerController.OnProcessingStart += TriggerControllerOnProcessingStart;
         _triggerController.OnProcessingComplete += TriggerControllerOnProcessingComplete;
         _triggerController.OnModeChanged += TriggerControllerOnModeChanged;
+        _triggerController.SetShowOrbDuringWorkflow(_showOrbDuringWorkflow);
+        _triggerController.SetTakeActionPromptPreference(_takeActionPromptPreference);
 
-        SetModeCombo(initialMode);
+        SetModeCombo(initialSettings.Mode);
+        SetTakeActionPromptCombo(_takeActionPromptPreference);
+        ShowOrbDuringWorkflowCheckBox.IsChecked = _showOrbDuringWorkflow;
+        _ = LoadRuntimeApiKeyIntoTextboxAsync();
         _isModeInitialized = true;
-        StatusText.Text = $"Status: Ready in {initialMode} mode. Press Trigger for text flow.";
+        StatusText.Text = $"Status: Ready in {initialSettings.Mode} mode. Press Trigger for text flow.";
         UiPresentation.ApplyShinyText(StatusText, ColorFromHex("#98B4C8"), ColorFromHex("#FFFFFF"), 2.8);
         _logitechStatusTimer = new DispatcherTimer
         {
@@ -80,6 +94,7 @@ public partial class MainWindow : Window
         _triggerController.OnProcessingStart -= TriggerControllerOnProcessingStart;
         _triggerController.OnProcessingComplete -= TriggerControllerOnProcessingComplete;
         _triggerController.OnModeChanged -= TriggerControllerOnModeChanged;
+        _runtimeGeminiClient.Dispose();
         base.OnClosed(e);
     }
 
@@ -154,6 +169,45 @@ public partial class MainWindow : Window
     private void ExitButton_OnClick(object sender, RoutedEventArgs e)
     {
         Application.Current.Shutdown();
+    }
+
+    private async void SetApiKeyButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingApiKey)
+        {
+            return;
+        }
+
+        var apiKey = ApiKeyTextBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            StatusText.Text = "Status: Enter a Gemini API key before pressing Set.";
+            return;
+        }
+
+        _isUpdatingApiKey = true;
+        SetApiKeyButton.IsEnabled = false;
+        var originalContent = SetApiKeyButton.Content;
+        SetApiKeyButton.Content = "Saving";
+
+        try
+        {
+            await _runtimeGeminiClient.UpdateRuntimeApiKeyAsync(apiKey, CancellationToken.None);
+            var saved = await _runtimeLaunchProfileService.UpdateApiKeysAsync(apiKey);
+            StatusText.Text = saved
+                ? "Status: Gemini API key updated for this session and future restarts."
+                : "Status: Gemini API key updated for this session.";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Status: Failed to update Gemini API key. {ex.Message}";
+        }
+        finally
+        {
+            _isUpdatingApiKey = false;
+            SetApiKeyButton.IsEnabled = true;
+            SetApiKeyButton.Content = originalContent;
+        }
     }
 
     private void DialSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -318,9 +372,64 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!_showOrbDuringWorkflow && mode == InteractionMode.Guided)
+        {
+            SetModeCombo(InteractionMode.Smart);
+            StatusText.Text = "Status: Guided mode requires orb visibility, so Smart mode stayed active.";
+            return;
+        }
+
         _triggerController.SetInteractionMode(mode);
         await _settingsService.SaveModeAsync(mode);
         StatusText.Text = $"Status: Mode switched to {mode}.";
+    }
+
+    private async void ShowOrbDuringWorkflowCheckBox_OnChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_isModeInitialized)
+        {
+            return;
+        }
+
+        _showOrbDuringWorkflow = ShowOrbDuringWorkflowCheckBox.IsChecked == true;
+        _triggerController.SetShowOrbDuringWorkflow(_showOrbDuringWorkflow);
+
+        if (!_showOrbDuringWorkflow && ModeCombo.SelectedItem is ComboBoxItem item && string.Equals(item.Tag as string, "Guided", StringComparison.OrdinalIgnoreCase))
+        {
+            SetModeCombo(InteractionMode.Smart);
+            _triggerController.SetInteractionMode(InteractionMode.Smart);
+            await _settingsService.SaveModeAsync(InteractionMode.Smart);
+        }
+
+        await _settingsService.SaveShowOrbDuringWorkflowAsync(_showOrbDuringWorkflow);
+        StatusText.Text = _showOrbDuringWorkflow
+            ? "Status: Orb will appear during workflows and hide after completion."
+            : "Status: Orb hidden for normal smart workflows; result panel stays primary.";
+    }
+
+    private async void TakeActionPromptCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isModeInitialized)
+        {
+            return;
+        }
+
+        if (TakeActionPromptCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+        {
+            return;
+        }
+
+        if (!Enum.TryParse<TakeActionPromptPreference>(tag, true, out var preference))
+        {
+            return;
+        }
+
+        _takeActionPromptPreference = preference;
+        _triggerController.SetTakeActionPromptPreference(preference);
+        await _settingsService.SaveTakeActionPromptPreferenceAsync(preference);
+        StatusText.Text = preference == TakeActionPromptPreference.AlwaysAskToRun
+            ? "Status: Result-panel Take Action will always show Run preview."
+            : "Status: Result-panel Take Action will show confirmation without the Run preview.";
     }
 
     private void TriggerControllerOnModeChanged(object? sender, InteractionMode mode)
@@ -369,6 +478,40 @@ public partial class MainWindow : Window
         }
 
         ModeCombo.SelectedIndex = 0;
+    }
+
+    private void SetTakeActionPromptCombo(TakeActionPromptPreference preference)
+    {
+        foreach (var item in TakeActionPromptCombo.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is string tag && string.Equals(tag, preference.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                TakeActionPromptCombo.SelectedItem = item;
+                return;
+            }
+        }
+
+        TakeActionPromptCombo.SelectedIndex = 0;
+    }
+
+    private async Task LoadRuntimeApiKeyIntoTextboxAsync()
+    {
+        try
+        {
+            var profile = await _runtimeLaunchProfileService.TryLoadAsync();
+            if (profile is null)
+            {
+                return;
+            }
+
+            ApiKeyTextBox.Text = !string.IsNullOrWhiteSpace(profile.ApiKeys)
+                ? profile.ApiKeys
+                : profile.ApiKey;
+        }
+        catch
+        {
+            // Keep the dev field empty if profile loading fails.
+        }
     }
 
     private static System.Windows.Media.Color ColorFromHex(string value)

@@ -9,6 +9,11 @@ namespace Cursivis.Companion.Services;
 
 public sealed class GeminiClient : IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private static readonly Regex CodeKeywordRegex = new(@"\b(function|class|const|let|var|public|private|protected|return|if\s*\(|for\s*\(|while\s*\(|try|catch|throw|await|async|import|export|console\.log|print\s*\(|SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CodeInlineFeatureRegex = new(@"(=>|==={0,1}|!==|::|</?[a-z][^>]*>|#include\b|using\s+[A-Z][A-Za-z0-9_.]+;)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex CodePunctuationFeatureRegex = new(@"[{};]", RegexOptions.Compiled);
@@ -165,7 +170,7 @@ public sealed class GeminiClient : IDisposable
             throw new InvalidOperationException(FormatBackendError(response.StatusCode, body));
         }
 
-        var parsed = JsonSerializer.Deserialize<TranscribeResponse>(body);
+        var parsed = JsonSerializer.Deserialize<TranscribeResponse>(body, JsonOptions);
         if (parsed is null || string.IsNullOrWhiteSpace(parsed.Text))
         {
             return null;
@@ -192,6 +197,32 @@ public sealed class GeminiClient : IDisposable
         }
 
         return parsed;
+    }
+
+    public async Task UpdateRuntimeApiKeyAsync(string apiKey, CancellationToken cancellationToken)
+    {
+        var normalized = string.Join(
+            ",",
+            (apiKey ?? string.Empty)
+                .Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.Ordinal));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException("Enter a valid Gemini API key before pressing Set.");
+        }
+
+        var response = await _httpClient.PostAsJsonAsync(
+            "/runtime/api-key",
+            new RuntimeApiKeyUpdateRequest { ApiKey = normalized },
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(FormatBackendError(response.StatusCode, body));
+        }
     }
 
     private AgentRequest BuildBaseRequest(string mode, string? actionHint, string? activeApp, string? voiceCommand, System.Windows.Point cursor)
@@ -745,6 +776,11 @@ public sealed class GeminiClient : IDisposable
         public string AudioBase64 { get; init; } = string.Empty;
 
         public string MimeType { get; init; } = "audio/wav";
+    }
+
+    private sealed class RuntimeApiKeyUpdateRequest
+    {
+        public string ApiKey { get; init; } = string.Empty;
     }
 
     private sealed class TranscribeResponse

@@ -4,6 +4,7 @@ using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace Cursivis.Companion.Controllers;
 
@@ -45,13 +46,17 @@ public sealed class TriggerController : IDisposable
     private IntPtr _lastExternalWindow = IntPtr.Zero;
     private string _lastResult = string.Empty;
     private CapturedSelectionContext? _lastSelectionContext;
+    private bool _takeActionContextReady;
     private InteractionMode _interactionMode;
+    private bool _showOrbDuringWorkflow = true;
+    private TakeActionPromptPreference _takeActionPromptPreference = TakeActionPromptPreference.AlwaysAskToRun;
     private readonly bool _autoReplaceEnabled;
     private readonly double _autoReplaceConfidenceThreshold;
     private readonly bool _managedBrowserFallbackEnabled;
     private readonly bool _textVisualContextEnabled;
     private readonly int _textVisualContextWidth;
     private readonly int _textVisualContextHeight;
+    private readonly DispatcherTimer _guidedMenuAutoCommitTimer;
     public TriggerController(
         CursorTracker cursorTracker,
         SelectionDetector selectionDetector,
@@ -90,6 +95,11 @@ public sealed class TriggerController : IDisposable
         _textVisualContextEnabled = ParseBoolEnv("CURSIVIS_ENABLE_TEXT_SCREEN_CONTEXT", defaultValue: false);
         _textVisualContextWidth = ParseIntEnv("CURSIVIS_TEXT_SCREEN_CONTEXT_WIDTH", defaultValue: 480);
         _textVisualContextHeight = ParseIntEnv("CURSIVIS_TEXT_SCREEN_CONTEXT_HEIGHT", defaultValue: 320);
+        _guidedMenuAutoCommitTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(2)
+        };
+        _guidedMenuAutoCommitTimer.Tick += GuidedMenuAutoCommitTimerOnTick;
         _cursorTracker.PositionChanged += CursorTrackerOnPositionChanged;
         _resultPanelWindow.InsertRequested += ResultPanelWindowOnInsertRequested;
         _resultPanelWindow.MoreOptionsRequested += ResultPanelWindowOnMoreOptionsRequested;
@@ -118,6 +128,17 @@ public sealed class TriggerController : IDisposable
 
     public InteractionMode CurrentMode => _interactionMode;
 
+    public void SetShowOrbDuringWorkflow(bool showOrbDuringWorkflow)
+    {
+        _showOrbDuringWorkflow = showOrbDuringWorkflow;
+        _orbOverlayWindow.SetShowOrbDuringWorkflow(showOrbDuringWorkflow);
+    }
+
+    public void SetTakeActionPromptPreference(TakeActionPromptPreference preference)
+    {
+        _takeActionPromptPreference = preference;
+    }
+
     public void SetInteractionMode(InteractionMode mode)
     {
         if (_interactionMode == mode)
@@ -133,6 +154,7 @@ public sealed class TriggerController : IDisposable
 
     public void CollapseTransientUi()
     {
+        StopGuidedMenuAutoCommit();
         if (_runLock.CurrentCount == 0)
         {
             return;
@@ -153,7 +175,7 @@ public sealed class TriggerController : IDisposable
                 await HandleImageSelectionAsync(CancellationToken.None);
                 break;
             case "action":
-                await HandleTakeActionAsync(CancellationToken.None);
+                await HandleDirectTakeActionAsync(CancellationToken.None);
                 break;
             default:
                 await HandleTapAsync(CancellationToken.None);
@@ -173,27 +195,57 @@ public sealed class TriggerController : IDisposable
     {
         var selectionSource = ResolveSelectionSource();
         _orbOverlayWindow.MoveToTopRight();
-        _orbOverlayWindow.SetState(
-            OrbState.Listening,
-            cancellationToken.CanBeCanceled ? "Listening... release to send" : "Listening... speak your command");
         EnsureWindowVisible(_orbOverlayWindow);
         _lastExternalWindow = selectionSource.WindowHandle;
 
-        var voiceCommand = await _voiceCommandPromptService.PromptAsync(
-            (state, message) => _orbOverlayWindow.SetState(state, message),
-            level => _orbOverlayWindow.SetListeningLevel(level),
-            cancellationToken);
-        if (string.IsNullOrWhiteSpace(voiceCommand))
+        try
         {
-            _orbOverlayWindow.SetState(OrbState.Idle, "Voice command canceled");
-            return;
+            var voiceCommand = await PromptVoiceCommandFromOrbAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(voiceCommand))
+            {
+                _orbOverlayWindow.SetState(OrbState.Idle, "Voice command canceled");
+                return;
+            }
+
+            await HandleTapAsync(
+                CancellationToken.None,
+                voiceCommand,
+                forceActionMenu: false,
+                selectionSource.WindowHandle != IntPtr.Zero ? selectionSource : null);
+        }
+        finally
+        {
+            _orbOverlayWindow.SetListeningLevel(0);
+        }
+    }
+
+    private async Task<string?> PromptVoiceCommandFromOrbAsync(CancellationToken cancellationToken)
+    {
+        using var stopRecordingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        void OnListeningStopRequested(object? sender, EventArgs e)
+        {
+            if (!stopRecordingCts.IsCancellationRequested)
+            {
+                stopRecordingCts.Cancel();
+            }
         }
 
-        await HandleTapAsync(
-            CancellationToken.None,
-            voiceCommand,
-            forceActionMenu: false,
-            selectionSource.WindowHandle != IntPtr.Zero ? selectionSource : null);
+        _orbOverlayWindow.ListeningStopRequested += OnListeningStopRequested;
+        _orbOverlayWindow.SetState(OrbState.Listening, "Recording... tap stop");
+        EnsureWindowVisible(_orbOverlayWindow);
+
+        try
+        {
+            return await _voiceCommandPromptService.PromptAsync(
+                (state, message) => _orbOverlayWindow.SetState(state, message),
+                level => _orbOverlayWindow.SetListeningLevel(level),
+                stopRecordingCts.Token);
+        }
+        finally
+        {
+            _orbOverlayWindow.ListeningStopRequested -= OnListeningStopRequested;
+            _orbOverlayWindow.SetListeningLevel(0);
+        }
     }
 
     public void HandleDialTick(int delta)
@@ -205,7 +257,7 @@ public sealed class TriggerController : IDisposable
 
         if (_orbOverlayWindow.IsMenuVisible)
         {
-            _orbOverlayWindow.NavigateOptionMenu(delta);
+            NavigateGuidedMenu(delta);
             return;
         }
 
@@ -213,8 +265,20 @@ public sealed class TriggerController : IDisposable
         OnActionChange?.Invoke(this, _orbOverlayWindow.CurrentIdleCommand);
     }
 
+    public bool HandleExternalScrollWheel(int delta)
+    {
+        if (delta == 0 || !_orbOverlayWindow.IsMenuVisible)
+        {
+            return false;
+        }
+
+        NavigateGuidedMenu(delta);
+        return true;
+    }
+
     public Task HandleDialPressAsync(CancellationToken cancellationToken)
     {
+        StopGuidedMenuAutoCommit();
         if (_orbOverlayWindow.TryConfirmMenuSelection())
         {
             return Task.CompletedTask;
@@ -225,7 +289,7 @@ public sealed class TriggerController : IDisposable
 
     public async Task HandleTakeActionAsync(CancellationToken cancellationToken)
     {
-        if (_lastSelectionContext is null || string.IsNullOrWhiteSpace(_lastResult))
+        if (!HasPendingTakeActionContext)
         {
             _resultPanelWindow.ShowInfo(
                 "No recent AI result is available for browser action execution yet.",
@@ -242,6 +306,64 @@ public sealed class TriggerController : IDisposable
         {
             OnProcessingStart?.Invoke(this, EventArgs.Empty);
             await ExecuteTakeActionFlowAsync(autoTriggered: false, cancellationToken);
+        }
+        finally
+        {
+            OnProcessingComplete?.Invoke(this, EventArgs.Empty);
+            _runLock.Release();
+        }
+    }
+
+    public async Task HandleDirectTakeActionAsync(CancellationToken cancellationToken)
+    {
+        if (!await _runLock.WaitAsync(0, cancellationToken))
+        {
+            return;
+        }
+
+        try
+        {
+            OnProcessingStart?.Invoke(this, EventArgs.Empty);
+
+            var cursor = _cursorTracker.CurrentPosition;
+            var selectionSource = ResolveSelectionSource();
+            _lastExternalWindow = selectionSource.WindowHandle;
+
+            _orbOverlayWindow.MoveToTopRight();
+            _orbOverlayWindow.HideActionRing();
+            EnsureWindowVisible(_orbOverlayWindow);
+            _orbOverlayWindow.SetState(OrbState.Processing, "Analyzing selection for Take Action...");
+
+            var selection = await _selectionDetector.CaptureSelectionAsync(_lastExternalWindow, cancellationToken);
+            if (!selection.HasAnyContent)
+            {
+                _orbOverlayWindow.SetState(OrbState.Idle, "No selection found");
+                _resultPanelWindow.ShowInfo(
+                    "Select some text or an image first, then press Take Action.",
+                    cursor);
+                return;
+            }
+
+            await PrepareTakeActionContextFromSelectionAsync(
+                selection,
+                selectionSource.ProcessName,
+                selectionSource.WindowHandle,
+                cursor,
+                cancellationToken);
+
+            await ExecuteTakeActionFlowAsync(autoTriggered: true, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _orbOverlayWindow.SetState(OrbState.Completed, "Action canceled");
+            _resultPanelWindow.ShowInfo(
+                "Take Action was canceled before completion.",
+                _cursorTracker.CurrentPosition);
+        }
+        catch (Exception ex)
+        {
+            _orbOverlayWindow.SetState(OrbState.Completed, "Action failed");
+            _resultPanelWindow.ShowInfo($"Error: {ex.Message}", _cursorTracker.CurrentPosition);
         }
         finally
         {
@@ -394,6 +516,8 @@ public sealed class TriggerController : IDisposable
         _resultPanelWindow.UndoRequested -= ResultPanelWindowOnUndoRequested;
         _orbOverlayWindow.IdleCommandInvoked -= OrbOverlayWindowOnIdleCommandInvoked;
         _orbOverlayWindow.ModeStepRequested -= OrbOverlayWindowOnModeStepRequested;
+        _guidedMenuAutoCommitTimer.Tick -= GuidedMenuAutoCommitTimerOnTick;
+        _guidedMenuAutoCommitTimer.Stop();
         _runLock.Dispose();
     }
 
@@ -432,8 +556,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {ToDisplayAction(actionHint).ToLowerInvariant()}...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.Value.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {displayAction.ToLowerInvariant()}...");
         }
         else
         {
@@ -509,6 +634,7 @@ public sealed class TriggerController : IDisposable
             var hexColor = _screenCaptureService.SamplePixelHex(cursor);
             _lastResult = hexColor;
             _lastSelectionContext = null;
+            _takeActionContextReady = false;
             await _clipboardService.SetTextAsync(hexColor);
             _orbOverlayWindow.SetState(OrbState.Completed, $"{hexColor} copied");
             _resultPanelWindow.ShowInfo($"{hexColor} copied to clipboard.", cursor);
@@ -531,9 +657,148 @@ public sealed class TriggerController : IDisposable
 
     private async Task CompleteSuccessfulRunAsync(AgentResponse response, Point cursor, CapturedSelectionContext context)
     {
+        var (normalizedAction, storedContext) = StoreSuccessfulRunContext(response, context);
+
+        await _clipboardService.SetTextAsync(response.Result);
+        await _intentMemoryService.RecordAsync(context.ContentType, normalizedAction);
+
+        var didAutoReplace = await TryAutoReplaceAsync(normalizedAction, response.Confidence, storedContext);
+        if (didAutoReplace && _lastExternalWindow != IntPtr.Zero)
+        {
+            PushUndoHistory(new UndoHistoryEntry(UndoTarget.ExternalWindow, _lastExternalWindow, $"Undo {ToDisplayAction(normalizedAction)} replace"));
+        }
+
+        _orbOverlayWindow.SetState(
+            OrbState.Completed,
+            didAutoReplace
+                ? "Replaced in app + copied (Ctrl+Z to undo)"
+                : "Result copied to clipboard");
+
+        _resultPanelWindow.ShowResult(
+            ResolveResultDisplayAction(response, context),
+            didAutoReplace
+                ? $"{response.Result}\n\n[Auto-replaced in app. Press Ctrl+Z in target app to undo.]"
+                : response.Result,
+            cursor);
+
+        OnProcessingComplete?.Invoke(this, EventArgs.Empty);
+    }
+
+    private async Task PrepareTakeActionContextFromSelectionAsync(
+        SelectionCaptureResult selection,
+        string? sourceProcessName,
+        IntPtr sourceWindowHandle,
+        Point cursor,
+        CancellationToken cancellationToken)
+    {
+        var mode = ModeToProtocol(_interactionMode);
+        if (selection.HasText)
+        {
+            var textVisualContext = !string.IsNullOrWhiteSpace(selection.ImageBase64) && !string.IsNullOrWhiteSpace(selection.ImageMimeType)
+                ? (ImageBase64: selection.ImageBase64, ImageMimeType: selection.ImageMimeType)
+                : TryCaptureTextVisualContext(cursor);
+            var suggestion = await _geminiClient.SuggestTextActionsAsync(
+                selection.Text!,
+                mode,
+                sourceProcessName,
+                cursor,
+                textVisualContext.ImageBase64,
+                textVisualContext.ImageMimeType,
+                cancellationToken);
+
+            var actionHint = ResolveAutomaticActionHint(suggestion);
+            if (!string.IsNullOrWhiteSpace(actionHint))
+            {
+                TrySyncActionRing(actionHint);
+                _orbOverlayWindow.SetState(OrbState.Processing, $"Preparing {ToDisplayAction(actionHint).ToLowerInvariant()} for Take Action...");
+            }
+            else
+            {
+                _orbOverlayWindow.SetState(OrbState.Processing, "Preparing Take Action...");
+            }
+
+            var response = await _geminiClient.AnalyzeTextAsync(
+                selection.Text!,
+                actionHint,
+                mode,
+                sourceProcessName,
+                voiceCommand: null,
+                cursor,
+                textVisualContext.ImageBase64,
+                textVisualContext.ImageMimeType,
+                cancellationToken);
+
+            StoreSuccessfulRunContext(
+                response,
+                new CapturedSelectionContext
+                {
+                    Kind = string.IsNullOrWhiteSpace(textVisualContext.ImageBase64) ? "text" : "text_image",
+                    Text = selection.Text,
+                    ImageBase64 = textVisualContext.ImageBase64,
+                    ImageMimeType = textVisualContext.ImageMimeType,
+                    ContentType = suggestion.ContentType,
+                    SourceWindowHandle = sourceWindowHandle,
+                    SourceProcessName = sourceProcessName,
+                    Suggestion = suggestion
+                });
+
+            return;
+        }
+
+        if (selection.HasImage)
+        {
+            var suggestion = await _geminiClient.SuggestImageActionsAsync(
+                selection.ImageBase64!,
+                selection.ImageMimeType ?? "image/png",
+                mode,
+                sourceProcessName,
+                cursor,
+                cancellationToken);
+
+            var actionHint = ResolveAutomaticActionHint(suggestion);
+            if (!string.IsNullOrWhiteSpace(actionHint))
+            {
+                TrySyncActionRing(actionHint);
+                _orbOverlayWindow.SetState(OrbState.Processing, $"Preparing {ToDisplayAction(actionHint).ToLowerInvariant()} for Take Action...");
+            }
+            else
+            {
+                _orbOverlayWindow.SetState(OrbState.Processing, "Preparing image Take Action...");
+            }
+
+            var response = await _geminiClient.AnalyzeImageAsync(
+                selection.ImageBase64!,
+                selection.ImageMimeType ?? "image/png",
+                actionHint,
+                mode,
+                sourceProcessName,
+                voiceCommand: null,
+                cursor,
+                cancellationToken);
+
+            StoreSuccessfulRunContext(
+                response,
+                new CapturedSelectionContext
+                {
+                    Kind = "image",
+                    ImageBase64 = selection.ImageBase64,
+                    ImageMimeType = selection.ImageMimeType ?? "image/png",
+                    ContentType = suggestion.ContentType,
+                    SourceWindowHandle = sourceWindowHandle,
+                    SourceProcessName = sourceProcessName,
+                    Suggestion = suggestion
+                });
+
+            return;
+        }
+
+        throw new InvalidOperationException("No selection content is available for Take Action.");
+    }
+
+    private (string NormalizedAction, CapturedSelectionContext StoredContext) StoreSuccessfulRunContext(AgentResponse response, CapturedSelectionContext context)
+    {
         var normalizedAction = NormalizeActionHint(response.Action);
-        _lastResult = response.Result;
-        _lastSelectionContext = context with
+        var storedContext = context with
         {
             Suggestion = new SuggestionResponse
             {
@@ -555,29 +820,11 @@ public sealed class TriggerController : IDisposable
             ExecutedAction = normalizedAction
         };
 
-        await _clipboardService.SetTextAsync(response.Result);
-        await _intentMemoryService.RecordAsync(context.ContentType, normalizedAction);
+        _lastResult = response.Result;
+        _lastSelectionContext = storedContext;
+        _takeActionContextReady = true;
 
-        var didAutoReplace = await TryAutoReplaceAsync(normalizedAction, response.Confidence, context);
-        if (didAutoReplace && _lastExternalWindow != IntPtr.Zero)
-        {
-            PushUndoHistory(new UndoHistoryEntry(UndoTarget.ExternalWindow, _lastExternalWindow, $"Undo {ToDisplayAction(normalizedAction)} replace"));
-        }
-
-        _orbOverlayWindow.SetState(
-            OrbState.Completed,
-            didAutoReplace
-                ? "Replaced in app + copied (Ctrl+Z to undo)"
-                : "Result copied to clipboard");
-
-        _resultPanelWindow.ShowResult(
-            ToDisplayAction(response.Action),
-            didAutoReplace
-                ? $"{response.Result}\n\n[Auto-replaced in app. Press Ctrl+Z in target app to undo.]"
-                : response.Result,
-            cursor);
-
-        OnProcessingComplete?.Invoke(this, EventArgs.Empty);
+        return (normalizedAction, storedContext);
     }
 
     private async Task ExecuteImageFlowAsync(
@@ -610,8 +857,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Analyzing image ({ToDisplayAction(actionHint)})...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.Value.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Analyzing image ({displayAction})...");
         }
         else
         {
@@ -666,16 +914,13 @@ public sealed class TriggerController : IDisposable
 
             if (string.Equals(selectedOption, CustomVoiceCommandOption, StringComparison.OrdinalIgnoreCase))
             {
-                var customVoice = await _voiceCommandPromptService.PromptAsync(
-                    (state, message) => _orbOverlayWindow.SetState(state, message),
-                    level => _orbOverlayWindow.SetListeningLevel(level),
-                    cancellationToken);
+                var customVoice = await PromptVoiceCommandFromOrbAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(customVoice))
                 {
                     return null;
                 }
 
-                return new ActionDecision(null, customVoice, bestAction);
+                return new ActionDecision(null, customVoice, "Custom Task");
             }
 
             if (selectedOption.StartsWith(AiSuggestPrefix, StringComparison.OrdinalIgnoreCase))
@@ -689,7 +934,10 @@ public sealed class TriggerController : IDisposable
 
         // Smart mode: use Gemini's routed best action as the execution hint so the same decision is carried through.
         var smartAction = string.IsNullOrWhiteSpace(bestAction) ? null : NormalizeActionHint(bestAction);
-        return new ActionDecision(smartAction, voiceCommand, smartAction);
+        var displayAction = string.IsNullOrWhiteSpace(voiceCommand)
+            ? smartAction
+            : ResolveExecutionDisplayAction(smartAction, voiceCommand);
+        return new ActionDecision(smartAction, voiceCommand, displayAction);
     }
 
     private Task<GuidedMenuOptions> BuildActionMenuOptionsAsync(SuggestionResponse suggestion, CancellationToken cancellationToken)
@@ -924,6 +1172,7 @@ public sealed class TriggerController : IDisposable
             deferredCts.Cancel();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
+                StopGuidedMenuAutoCommit();
                 if (menuHandler is not null)
                 {
                     _orbOverlayWindow.MenuOptionSelected -= menuHandler;
@@ -1084,6 +1333,28 @@ public sealed class TriggerController : IDisposable
         OnActionChange?.Invoke(this, CurrentAction);
     }
 
+    private bool HasPendingTakeActionContext =>
+        _takeActionContextReady &&
+        _lastSelectionContext is not null &&
+        !string.IsNullOrWhiteSpace(_lastResult);
+
+    private void ConsumeTakeActionContext()
+    {
+        _takeActionContextReady = false;
+    }
+
+    private static string? ResolveAutomaticActionHint(SuggestionResponse suggestion)
+    {
+        if (!string.IsNullOrWhiteSpace(suggestion.BestAction))
+        {
+            return NormalizeActionHint(suggestion.BestAction);
+        }
+
+        return string.IsNullOrWhiteSpace(suggestion.RecommendedAction)
+            ? null
+            : NormalizeActionHint(suggestion.RecommendedAction);
+    }
+
     private void CursorTrackerOnPositionChanged(object? sender, System.Windows.Point e)
     {
         // Keep the orb anchored unless the user drags it manually.
@@ -1114,7 +1385,7 @@ public sealed class TriggerController : IDisposable
 
     private async Task ExecuteTakeActionFlowAsync(bool autoTriggered, CancellationToken cancellationToken)
     {
-        if (_lastSelectionContext is null || string.IsNullOrWhiteSpace(_lastResult))
+        if (!HasPendingTakeActionContext)
         {
             _resultPanelWindow.ShowInfo(
                 "No recent AI result is available for browser action execution yet.",
@@ -1125,6 +1396,7 @@ public sealed class TriggerController : IDisposable
         ExtensionBridgeHealthResponse? extensionHealth = null;
         try
         {
+            var selectionContext = _lastSelectionContext!;
             var cursor = _cursorTracker.CurrentPosition;
             EnsureWindowVisible(_orbOverlayWindow);
             _orbOverlayWindow.SetState(
@@ -1132,13 +1404,13 @@ public sealed class TriggerController : IDisposable
                 autoTriggered ? "Preparing action..." : "Preparing Take Action...");
 
             var sourceIsBrowser =
-                IsBrowserProcess(_lastSelectionContext.SourceProcessName) &&
-                _lastSelectionContext.SourceWindowHandle != IntPtr.Zero;
-            extensionHealth = sourceIsBrowser && IsChromiumBrowserProcess(_lastSelectionContext.SourceProcessName)
+                IsBrowserProcess(selectionContext.SourceProcessName) &&
+                selectionContext.SourceWindowHandle != IntPtr.Zero;
+            extensionHealth = sourceIsBrowser && IsChromiumBrowserProcess(selectionContext.SourceProcessName)
                 ? await _extensionAutomationClient.TryGetHealthAsync(cancellationToken)
                 : null;
 
-            var extensionBrowserContext = sourceIsBrowser && IsChromiumBrowserProcess(_lastSelectionContext.SourceProcessName)
+            var extensionBrowserContext = sourceIsBrowser && IsChromiumBrowserProcess(selectionContext.SourceProcessName)
                 ? await _extensionAutomationClient.TryGetActiveTabContextAsync(cancellationToken)
                 : null;
             var extensionPageContext = extensionBrowserContext?.PageContext;
@@ -1146,15 +1418,15 @@ public sealed class TriggerController : IDisposable
                                                   extensionPageContext is not null &&
                                                   !string.IsNullOrWhiteSpace(extensionPageContext.Url);
             var activeBrowserContext = sourceIsBrowser
-                ? _activeBrowserAutomationService.TryBuildPageContext(_lastSelectionContext.SourceWindowHandle)
+                ? _activeBrowserAutomationService.TryBuildPageContext(selectionContext.SourceWindowHandle)
                 : null;
             var currentBrowserUrl = shouldUseExtensionBrowserSession
                 ? extensionPageContext!.Url
                 : string.IsNullOrWhiteSpace(activeBrowserContext?.Url)
                     ? null
                     : activeBrowserContext.Url;
-            var targetUrl = ResolveTakeActionTargetUrl(_lastSelectionContext, currentBrowserUrl);
-            var preferredBrowserChannel = ResolvePreferredBrowserChannel(_lastSelectionContext.SourceProcessName);
+            var targetUrl = ResolveTakeActionTargetUrl(selectionContext, currentBrowserUrl);
+            var preferredBrowserChannel = ResolvePreferredBrowserChannel(selectionContext.SourceProcessName);
 
             BrowserPageContext planContext;
             BrowserPageContextResponse? managedBrowserReady = null;
@@ -1199,16 +1471,17 @@ public sealed class TriggerController : IDisposable
                 OrbState.Processing,
                 autoTriggered ? "Planning auto action..." : "Planning Take Action...");
 
-            var selectedAction = string.IsNullOrWhiteSpace(_lastSelectionContext.ExecutedAction)
-                ? _lastSelectionContext.Suggestion.BestAction ?? _lastSelectionContext.Suggestion.RecommendedAction
-                : _lastSelectionContext.ExecutedAction;
-            var executionInstruction = _lastSelectionContext.VoiceCommand;
+            var selectedAction = string.IsNullOrWhiteSpace(selectionContext.ExecutedAction)
+                ? selectionContext.Suggestion.BestAction ?? selectionContext.Suggestion.RecommendedAction
+                : selectionContext.ExecutedAction;
+            var executionInstruction = selectionContext.VoiceCommand;
 
             var plan = await BuildBrowserActionPlanAsync(
                 planContext,
                 selectedAction,
                 executionInstruction,
                 cancellationToken);
+            var alreadyConfirmedByUser = false;
 
             if (plan.Steps.Count == 0)
             {
@@ -1222,53 +1495,61 @@ public sealed class TriggerController : IDisposable
 
             if (!autoTriggered)
             {
-                var previewDecision = await ShowActionPlanPreviewAsync(plan, ToDisplayAction(selectedAction), executionInstruction);
-                if (previewDecision.ChangeResultRequested)
+                if (_takeActionPromptPreference == TakeActionPromptPreference.AlwaysAskToRun)
                 {
-                    var decision = await ResolveActionDecisionAsync(
-                        _lastSelectionContext.Suggestion,
-                        _lastSelectionContext.VoiceCommand,
-                        forceActionMenu: true,
-                        cancellationToken);
-
-                    if (decision is null)
+                    var previewDecision = await ShowActionPlanPreviewAsync(plan, ToDisplayAction(selectedAction), executionInstruction);
+                    if (previewDecision.ChangeResultRequested)
                     {
-                        _orbOverlayWindow.SetState(OrbState.Idle, "Take Action change canceled");
+                        var decision = await ResolveActionDecisionAsync(
+                            selectionContext.Suggestion,
+                            selectionContext.VoiceCommand,
+                            forceActionMenu: true,
+                            cancellationToken);
+
+                        if (decision is null)
+                        {
+                            _orbOverlayWindow.SetState(OrbState.Idle, "Take Action change canceled");
+                            return;
+                        }
+
+                        await ReRunLastSelectionAsync(decision.Value, cancellationToken);
                         return;
                     }
 
-                    await ReRunLastSelectionAsync(decision.Value, cancellationToken);
-                    return;
-                }
-
-                if (!previewDecision.Approved)
-                {
-                    _orbOverlayWindow.SetState(OrbState.Idle, "Take Action canceled");
-                    return;
-                }
-
-                executionInstruction = CombineExecutionInstruction(_lastSelectionContext.VoiceCommand, previewDecision.AdditionalInstruction);
-                if (!string.Equals(executionInstruction, _lastSelectionContext.VoiceCommand, StringComparison.Ordinal))
-                {
-                    _orbOverlayWindow.SetState(OrbState.Processing, "Refining Take Action plan...");
-                    plan = await BuildBrowserActionPlanAsync(
-                        planContext,
-                        selectedAction,
-                        executionInstruction,
-                        cancellationToken);
-                    if (plan.Steps.Count == 0)
+                    if (!previewDecision.Approved)
                     {
-                        _orbOverlayWindow.SetState(OrbState.Completed, "Take Action ready");
-                        _resultPanelWindow.ShowInfo(
-                            $"Take Action paused.{Environment.NewLine}{Environment.NewLine}{plan.Summary}{Environment.NewLine}{Environment.NewLine}{BuildTakeActionRetryHint(targetUrl, currentBrowserUrl, shouldUseExtensionBrowserSession, shouldUseActiveBrowserSession, IsExtensionUnavailable(extensionHealth), _managedBrowserFallbackEnabled)}",
-                            cursor,
-                            allowTakeAction: true);
+                        _orbOverlayWindow.SetState(OrbState.Idle, "Take Action canceled");
                         return;
                     }
+
+                    alreadyConfirmedByUser = true;
+                    executionInstruction = CombineExecutionInstruction(selectionContext.VoiceCommand, previewDecision.AdditionalInstruction);
+                    if (!string.Equals(executionInstruction, selectionContext.VoiceCommand, StringComparison.Ordinal))
+                    {
+                        _orbOverlayWindow.SetState(OrbState.Processing, "Refining Take Action plan...");
+                        plan = await BuildBrowserActionPlanAsync(
+                            planContext,
+                            selectedAction,
+                            executionInstruction,
+                            cancellationToken);
+                        if (plan.Steps.Count == 0)
+                        {
+                            _orbOverlayWindow.SetState(OrbState.Completed, "Take Action ready");
+                            _resultPanelWindow.ShowInfo(
+                                $"Take Action paused.{Environment.NewLine}{Environment.NewLine}{plan.Summary}{Environment.NewLine}{Environment.NewLine}{BuildTakeActionRetryHint(targetUrl, currentBrowserUrl, shouldUseExtensionBrowserSession, shouldUseActiveBrowserSession, IsExtensionUnavailable(extensionHealth), _managedBrowserFallbackEnabled)}",
+                                cursor,
+                                allowTakeAction: true);
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    alreadyConfirmedByUser = true;
                 }
             }
 
-            if (plan.RequiresConfirmation)
+            if (plan.RequiresConfirmation && !alreadyConfirmedByUser)
             {
                 var confirmed = await Application.Current.Dispatcher.InvokeAsync(() =>
                     MessageBox.Show(
@@ -1287,6 +1568,7 @@ public sealed class TriggerController : IDisposable
             }
 
             OnActionExecute?.Invoke(this, autoTriggered ? "Auto Take Action" : "Take Action");
+            ConsumeTakeActionContext();
             _orbOverlayWindow.SetState(
                 OrbState.Processing,
                 autoTriggered
@@ -1319,9 +1601,9 @@ public sealed class TriggerController : IDisposable
                 }
                 else if (canUseActiveBrowserSession)
                 {
-                    _orbOverlayWindow.SetState(OrbState.Processing, "Retrying in current browser window...");
+                        _orbOverlayWindow.SetState(OrbState.Processing, "Retrying in current browser window...");
                     execution = await _activeBrowserAutomationService.ExecutePlanAsync(
-                        _lastSelectionContext.SourceWindowHandle,
+                        selectionContext.SourceWindowHandle,
                         plan,
                         cancellationToken);
 
@@ -1352,7 +1634,7 @@ public sealed class TriggerController : IDisposable
             else if (shouldUseActiveBrowserSession)
             {
                 execution = await _activeBrowserAutomationService.ExecutePlanAsync(
-                    _lastSelectionContext.SourceWindowHandle,
+                    selectionContext.SourceWindowHandle,
                     plan,
                     cancellationToken);
 
@@ -1392,7 +1674,7 @@ public sealed class TriggerController : IDisposable
                 _resultPanelWindow.ShowInfo(
                     BuildTakeActionSummary(plan, execution, extensionHealth),
                     cursor,
-                    allowTakeAction: true);
+                    allowTakeAction: HasPendingTakeActionContext);
         }
         catch (Exception ex)
         {
@@ -1400,7 +1682,7 @@ public sealed class TriggerController : IDisposable
             _resultPanelWindow.ShowInfo(
                 $"{(autoTriggered ? "Auto Take Action" : "Take Action")} failed.{Environment.NewLine}{Environment.NewLine}{ex.Message}{Environment.NewLine}{Environment.NewLine}{BuildTakeActionRetryHint(null, null, false, false, IsExtensionUnavailable(extensionHealth), _managedBrowserFallbackEnabled)}",
                 _cursorTracker.CurrentPosition,
-                allowTakeAction: true);
+                allowTakeAction: HasPendingTakeActionContext);
         }
     }
 
@@ -1618,8 +1900,9 @@ public sealed class TriggerController : IDisposable
         if (!string.IsNullOrWhiteSpace(actionHint))
         {
             TrySyncActionRing(actionHint);
-            OnActionExecute?.Invoke(this, ToDisplayAction(actionHint));
-            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {ToDisplayAction(actionHint).ToLowerInvariant()}...");
+            var displayAction = ResolveExecutionDisplayAction(actionHint, decision.VoiceCommand);
+            OnActionExecute?.Invoke(this, displayAction);
+            _orbOverlayWindow.SetState(OrbState.Processing, $"Running {displayAction.ToLowerInvariant()}...");
         }
         else if (!string.IsNullOrWhiteSpace(decision.DisplayAction))
         {
@@ -1937,6 +2220,41 @@ public sealed class TriggerController : IDisposable
         };
     }
 
+    private static string ResolveExecutionDisplayAction(string? actionHint, string? voiceCommand)
+    {
+        if (!string.IsNullOrWhiteSpace(voiceCommand) && IsBroadVoiceTaskAction(actionHint))
+        {
+            return "Custom Task";
+        }
+
+        return ToDisplayAction(actionHint ?? "summarize");
+    }
+
+    private static string ResolveResultDisplayAction(AgentResponse response, CapturedSelectionContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(context.VoiceCommand) && IsBroadVoiceTaskAction(response.Action))
+        {
+            return "Custom Task";
+        }
+
+        return ToDisplayAction(response.Action);
+    }
+
+    private static bool IsBroadVoiceTaskAction(string? actionHint)
+    {
+        return NormalizeActionHint(actionHint ?? string.Empty) switch
+        {
+            "summarize" => true,
+            "extract_insights" => true,
+            "bullet_points" => true,
+            "rewrite" => true,
+            "rewrite_structured" => true,
+            "expand_text" => true,
+            "explain" => true,
+            _ => false
+        };
+    }
+
     private static string ModeToProtocol(InteractionMode mode)
     {
         return mode == InteractionMode.Guided ? "guided" : "smart";
@@ -1973,12 +2291,43 @@ public sealed class TriggerController : IDisposable
         return (IntPtr.Zero, null);
     }
 
-    private static void EnsureWindowVisible(System.Windows.Window window)
+    private void EnsureWindowVisible(System.Windows.Window window)
     {
+        if (ReferenceEquals(window, _orbOverlayWindow) && !_showOrbDuringWorkflow)
+        {
+            return;
+        }
+
         if (!window.IsVisible)
         {
             window.Show();
         }
+    }
+
+    private void NavigateGuidedMenu(int delta)
+    {
+        _orbOverlayWindow.NavigateOptionMenu(delta);
+        ScheduleGuidedMenuAutoCommit();
+    }
+
+    private void ScheduleGuidedMenuAutoCommit()
+    {
+        _guidedMenuAutoCommitTimer.Stop();
+        if (_orbOverlayWindow.IsMenuVisible)
+        {
+            _guidedMenuAutoCommitTimer.Start();
+        }
+    }
+
+    private void StopGuidedMenuAutoCommit()
+    {
+        _guidedMenuAutoCommitTimer.Stop();
+    }
+
+    private void GuidedMenuAutoCommitTimerOnTick(object? sender, EventArgs e)
+    {
+        _guidedMenuAutoCommitTimer.Stop();
+        _ = _orbOverlayWindow.TryConfirmMenuSelection();
     }
 
     private readonly record struct ActionDecision(string? ActionHint, string? VoiceCommand, string? DisplayAction = null);

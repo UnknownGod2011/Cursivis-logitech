@@ -293,6 +293,26 @@
                         <ScaleTransform x:Name="OrbScaleTransform" ScaleX="0.88" ScaleY="0.88" />
                     </Border.RenderTransform>
                     <Grid>
+                        <Button x:Name="ListeningStopButton"
+                                Width="22"
+                                Height="22"
+                                Margin="0,0,12,12"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                Panel.ZIndex="20"
+                                Visibility="Collapsed"
+                                Background="#A61F1418"
+                                BorderBrush="#FFFF7B7B"
+                                BorderThickness="1"
+                                Cursor="Hand"
+                                ToolTip="Stop recording"
+                                Click="ListeningStopButton_OnClick">
+                            <Border Width="9"
+                                    Height="9"
+                                    Background="#FFFF5F5F"
+                                    CornerRadius="1" />
+                        </Button>
+
                         <Ellipse Margin="6"
                                  Stroke="#25FFFFFF"
                                  StrokeThickness="1">

@@ -8,6 +8,7 @@ param(
     [double]$AutoReplaceConfidence = 0.90,
     [switch]$EnableManagedBrowserFallback,
     [switch]$WarmManagedBrowser,
+    [switch]$ShowWindows,
     [switch]$SkipNpmInstall,
     [switch]$SkipCleanup,
     [switch]$NoHealthCheck,
@@ -18,7 +19,7 @@ $ErrorActionPreference = "Stop"
 
 if ($Help) {
     Write-Host "Usage:"
-    Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\run-demo.ps1 [-WithBridge] [-ApiKey <KEY>] [-ApiKeys <KEY1,KEY2,...>] [-BackendUrl <URL>] [-EnableStreamingTranscription] [-EnableAutoReplace] [-AutoReplaceConfidence <0-1>] [-EnableManagedBrowserFallback] [-WarmManagedBrowser] [-SkipNpmInstall] [-SkipCleanup] [-NoHealthCheck]"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\run-demo.ps1 [-WithBridge] [-ApiKey <KEY>] [-ApiKeys <KEY1,KEY2,...>] [-BackendUrl <URL>] [-EnableStreamingTranscription] [-EnableAutoReplace] [-AutoReplaceConfidence <0-1>] [-EnableManagedBrowserFallback] [-WarmManagedBrowser] [-ShowWindows] [-SkipNpmInstall] [-SkipCleanup] [-NoHealthCheck]"
     return
 }
 
@@ -29,6 +30,10 @@ $extensionBridgeDir = Join-Path $root "desktop\browser-native-host"
 $extensionBridgeLauncher = Join-Path $extensionBridgeDir "launch.cmd"
 $companionProject = Join-Path $root "desktop\cursivis-companion\src\Cursivis.Companion\Cursivis.Companion.csproj"
 $bridgeProject = Join-Path $root "plugin\logitech-plugin\src\Cursivis.Logitech.Bridge\Cursivis.Logitech.Bridge.csproj"
+$companionProjectDir = Split-Path -Parent $companionProject
+$companionExecutable = Join-Path $companionProjectDir "bin\Debug\net8.0-windows\Cursivis.Companion.exe"
+$profileDir = Join-Path $env:LOCALAPPDATA "Cursivis"
+$profilePath = Join-Path $profileDir "runtime-profile.json"
 
 Write-Host "Starting Cursivis demo stack..."
 Write-Host "Backend: $backendDir"
@@ -102,6 +107,25 @@ if ($rotationKeys.Count -eq 0) {
 $effectiveApiKey = if ($rotationKeys.Count -gt 0) { $rotationKeys[0] } else { "" }
 $effectiveApiKeysJoined = ($rotationKeys -join ",")
 
+New-Item -ItemType Directory -Force -Path $profileDir | Out-Null
+$runtimeProfile = [ordered]@{
+    backendDir = $backendDir
+    browserAgentDir = $browserAgentDir
+    extensionBridgeDir = $extensionBridgeDir
+    companionProject = $companionProject
+    companionExecutable = $companionExecutable
+    backendUrl = $BackendUrl
+    browserAgentUrl = "http://127.0.0.1:48820"
+    extensionBridgeUrl = "http://127.0.0.1:48830"
+    apiKey = $effectiveApiKey
+    apiKeys = $effectiveApiKeysJoined
+    enableStreamingTranscription = [bool]$EnableStreamingTranscription
+    enableAutoReplace = [bool]$EnableAutoReplace
+    autoReplaceConfidence = $AutoReplaceConfidence
+    enableManagedBrowserFallback = [bool]$EnableManagedBrowserFallback
+}
+($runtimeProfile | ConvertTo-Json -Depth 4) | Set-Content -Path $profilePath -Encoding UTF8
+
 $apiKeyEscaped = $effectiveApiKey.Replace("'", "''")
 $apiKeysEscaped = $effectiveApiKeysJoined.Replace("'", "''")
 $backendCmdParts = @(
@@ -119,7 +143,7 @@ if (-not $SkipNpmInstall) {
 
 $backendCmdParts += "npm start"
 $backendCmd = $backendCmdParts -join "; "
-$backendProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd -PassThru
+$backendProcess = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $backendCmd -PassThru -WindowStyle $(if ($ShowWindows) { "Normal" } else { "Hidden" })
 
 $browserAgentCmdParts = @(
     "`$env:CURSIVIS_BROWSER_CHANNEL='chrome'",
@@ -132,10 +156,10 @@ if (-not $SkipNpmInstall) {
 
 $browserAgentCmdParts += "npm start"
 $browserAgentCmd = $browserAgentCmdParts -join "; "
-$browserAgentProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", $browserAgentCmd -PassThru
+$browserAgentProcess = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $browserAgentCmd -PassThru -WindowStyle $(if ($ShowWindows) { "Normal" } else { "Hidden" })
 
 $extensionBridgeCmd = "Set-Location -LiteralPath '$extensionBridgeDir'; .\launch.cmd"
-$extensionBridgeProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", $extensionBridgeCmd -PassThru
+$extensionBridgeProcess = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $extensionBridgeCmd -PassThru -WindowStyle $(if ($ShowWindows) { "Normal" } else { "Hidden" })
 
 Start-Sleep -Seconds 2
 
@@ -154,14 +178,14 @@ if ($EnableAutoReplace) {
     $companionCmdParts += "`$env:CURSIVIS_AUTO_REPLACE_CONFIDENCE='$autoReplaceConfidenceInvariant'"
 }
 
-$companionCmdParts += "dotnet run --project '$companionProject'"
+$companionCmdParts += "dotnet run --project '$companionProject' -- --background"
 $companionCmd = $companionCmdParts -join "; "
 
-$companionProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", $companionCmd -PassThru
+$companionProcess = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $companionCmd -PassThru -WindowStyle $(if ($ShowWindows) { "Normal" } else { "Hidden" })
 
 if ($WithBridge) {
     Start-Sleep -Seconds 1
-    $bridgeProcess = Start-Process powershell -ArgumentList "-NoExit", "-Command", "dotnet run --project '$bridgeProject'" -PassThru
+    $bridgeProcess = Start-Process powershell -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "dotnet run --project '$bridgeProject'" -PassThru -WindowStyle $(if ($ShowWindows) { "Normal" } else { "Hidden" })
     Write-Host "Bridge PID: $($bridgeProcess.Id)"
 }
 
@@ -252,4 +276,7 @@ Write-Host "Backend PID: $($backendProcess.Id)"
 Write-Host "Browser action agent PID: $($browserAgentProcess.Id)"
 Write-Host "Extension bridge host PID: $($extensionBridgeProcess.Id)"
 Write-Host "Companion PID: $($companionProcess.Id)"
-Write-Host "Tip: close the spawned PowerShell windows to stop each component."
+Write-Host "Runtime profile saved: $profilePath"
+if ($ShowWindows) {
+    Write-Host "Tip: close the spawned PowerShell windows to stop each component."
+}

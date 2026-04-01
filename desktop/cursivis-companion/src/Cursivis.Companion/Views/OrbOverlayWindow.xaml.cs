@@ -16,6 +16,7 @@ public partial class OrbOverlayWindow : Window
     private readonly Ellipse[] _magicRings;
     private readonly string[] _idleCommands = ["Trigger", "Talk", "Snip-it", "Action"];
     private readonly DispatcherTimer _actionRingHideTimer;
+    private readonly DispatcherTimer _workflowHideTimer;
     private Storyboard? _pulseStoryboard;
     private Storyboard? _rotationStoryboard;
     private Storyboard? _completionStoryboard;
@@ -24,6 +25,7 @@ public partial class OrbOverlayWindow : Window
     private bool _hasPosition;
     private bool _isActionRingVisible;
     private bool _isMenuMode;
+    private bool _showOrbDuringWorkflow = true;
     private string _modeDisplay = "Smart";
     private int _idleCommandIndex;
     private List<string> _menuOptions = [];
@@ -77,6 +79,18 @@ public partial class OrbOverlayWindow : Window
             Interval = TimeSpan.FromMilliseconds(1250)
         };
         _actionRingHideTimer.Tick += (_, _) => HideActionRing();
+        _workflowHideTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(900)
+        };
+        _workflowHideTimer.Tick += (_, _) =>
+        {
+            _workflowHideTimer.Stop();
+            if (!_isMenuMode)
+            {
+                Hide();
+            }
+        };
 
         UiPresentation.ApplyShinyText(StatusText, ColorFromHex("#AFC6DA"), Colors.White, 2.4);
         ResetListeningLevelVisual();
@@ -90,6 +104,8 @@ public partial class OrbOverlayWindow : Window
     public event EventHandler<string>? IdleCommandInvoked;
 
     public event EventHandler<int>? ModeStepRequested;
+
+    public event EventHandler? ListeningStopRequested;
 
     public bool IsMenuVisible => _isMenuMode && _menuOptions.Count > 0;
 
@@ -127,20 +143,35 @@ public partial class OrbOverlayWindow : Window
         }
     }
 
+    public void SetShowOrbDuringWorkflow(bool showOrbDuringWorkflow)
+    {
+        _showOrbDuringWorkflow = showOrbDuringWorkflow;
+
+        if (!_showOrbDuringWorkflow)
+        {
+            _workflowHideTimer.Stop();
+            Hide();
+        }
+    }
+
     public void SetState(OrbState state, string status)
     {
         _currentState = state;
         StateText.Text = state == OrbState.Idle ? _modeDisplay : state.ToString();
         StatusText.Text = status;
+        ListeningStopButton.Visibility = state == OrbState.Listening ? Visibility.Visible : Visibility.Collapsed;
+        ListeningStopButton.IsHitTestVisible = state == OrbState.Listening;
         ApplyPalette(state);
 
         switch (state)
         {
             case OrbState.Processing:
+                PresentForWorkflow();
                 StartPulse(isListening: false);
                 AnimateBaseScale(1.0);
                 break;
             case OrbState.Listening:
+                PresentForWorkflow();
                 StartPulse(isListening: true);
                 AnimateBaseScale(1.0);
                 break;
@@ -149,11 +180,13 @@ public partial class OrbOverlayWindow : Window
                 ResetListeningLevelVisual();
                 PlayCompletionBurst();
                 AnimateBaseScale(0.98);
+                ScheduleHideAfterWorkflow();
                 break;
             default:
                 StopPulse();
                 ResetListeningLevelVisual();
                 AnimateBaseScale(_isMenuMode ? 1.0 : 0.88);
+                ScheduleHideAfterWorkflow();
                 break;
         }
 
@@ -225,6 +258,7 @@ public partial class OrbOverlayWindow : Window
     public void ShowActionRingTemporarily()
     {
         _isMenuMode = false;
+        PresentForWorkflow();
         SetActionRingVisible(true);
         _actionRingHideTimer.Stop();
         _actionRingHideTimer.Start();
@@ -241,6 +275,7 @@ public partial class OrbOverlayWindow : Window
 
     public void ShowOptionMenu(IReadOnlyList<string> options, int selectedIndex = 0)
     {
+        PresentForWorkflow();
         _isMenuMode = true;
         _menuOptions = options
             .Where(option => !string.IsNullOrWhiteSpace(option))
@@ -345,6 +380,36 @@ public partial class OrbOverlayWindow : Window
     {
         HideOptionMenu();
         SetState(OrbState.Idle, $"Ready ({_modeDisplay})");
+    }
+
+    private void PresentForWorkflow()
+    {
+        _workflowHideTimer.Stop();
+        if (!_showOrbDuringWorkflow)
+        {
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            Show();
+        }
+    }
+
+    private void ScheduleHideAfterWorkflow()
+    {
+        _workflowHideTimer.Stop();
+        if (!_showOrbDuringWorkflow || _isMenuMode)
+        {
+            if (!_showOrbDuringWorkflow)
+            {
+                Hide();
+            }
+
+            return;
+        }
+
+        _workflowHideTimer.Start();
     }
 
     private void StartPulse(bool isListening)
@@ -580,6 +645,12 @@ public partial class OrbOverlayWindow : Window
     private void IdleRunButton_OnClick(object sender, RoutedEventArgs e)
     {
         IdleCommandInvoked?.Invoke(this, _idleCommands[_idleCommandIndex]);
+    }
+
+    private void ListeningStopButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        ListeningStopRequested?.Invoke(this, EventArgs.Empty);
+        e.Handled = true;
     }
 
     private void AnimateBaseScale(double targetScale)

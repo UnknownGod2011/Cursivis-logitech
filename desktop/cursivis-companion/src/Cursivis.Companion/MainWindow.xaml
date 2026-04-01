@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Cursivis Companion"
-        Height="690"
+        Height="700"
         Width="432"
         MinWidth="400"
-        MinHeight="640"
+        MinHeight="620"
         ResizeMode="CanResizeWithGrip"
         Topmost="True"
         WindowStartupLocation="Manual"
@@ -25,6 +25,10 @@
                                   Color="#99112939"
                                   Opacity="0.85" />
             </Border.Effect>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False"
+                          Padding="0">
             <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -56,7 +60,8 @@
                             <TextBlock Margin="0,6,0,0"
                                        Style="{StaticResource SubtleTextStyle}"
                                        FontSize="13"
-                                       Text="Real Logitech plugin runtime on top, fallback companion controls below. Hardware arrives later; the workflow gets real now." />
+                                       TextWrapping="Wrap"
+                                       Text="Real Logitech plugin runtime and mouse-first workflow controls for daily Cursivis use." />
                         </StackPanel>
 
                         <Border Grid.Column="1"
@@ -94,6 +99,7 @@
                             <TextBlock Margin="0,4,0,12"
                                        Style="{StaticResource SubtleTextStyle}"
                                        FontSize="12"
+                                       TextWrapping="Wrap"
                                        Text="Live status from Logi Options+, Logi Plugin Service, and the installed Cursivis plugin." />
                         </StackPanel>
 
@@ -187,6 +193,7 @@
                             <TextBlock Margin="0,4,0,12"
                                        Style="{StaticResource SubtleTextStyle}"
                                        FontSize="12"
+                                       TextWrapping="Wrap"
                                        Text="Smart Mode lets Gemini decide. Guided Mode opens staged options." />
                             <ComboBox x:Name="ModeCombo"
                                       Width="224"
@@ -195,6 +202,35 @@
                                 <ComboBoxItem Content="Smart Mode (AutoPerform)" Tag="Smart" />
                                 <ComboBoxItem Content="Guided Mode (Manual)" Tag="Guided" />
                             </ComboBox>
+                            <CheckBox x:Name="ShowOrbDuringWorkflowCheckBox"
+                                      Margin="0,12,0,0"
+                                      Foreground="#FFD9EEFF"
+                                      FontSize="12"
+                                      Content="Show orb during workflows"
+                                      Checked="ShowOrbDuringWorkflowCheckBox_OnChanged"
+                                      Unchecked="ShowOrbDuringWorkflowCheckBox_OnChanged" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="When off, the orb stays hidden and only the result panel appears for normal smart flows." />
+                            <TextBlock Margin="0,12,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Take Action Prompt" />
+                            <ComboBox x:Name="TakeActionPromptCombo"
+                                      Width="224"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="TakeActionPromptCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Always ask to run" Tag="AlwaysAskToRun" />
+                                <ComboBoxItem Content="Confirm before execution" Tag="ConfirmBeforeExecution" />
+                            </ComboBox>
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="This affects Take Action from a normal result only. Direct Action from the ring still runs immediately." />
                         </StackPanel>
 
                         <Button Grid.Column="1"
@@ -214,7 +250,8 @@
                         Background="#77111B27"
                         BorderBrush="#33FFFFFF"
                         BorderThickness="1"
-                        Padding="16">
+                        Padding="16"
+                        Visibility="Collapsed">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -281,6 +318,7 @@
                         <StackPanel Grid.Row="1" Margin="0,10,0,0">
                             <TextBlock Style="{StaticResource SubtleTextStyle}"
                                        FontSize="12"
+                                       TextWrapping="Wrap"
                                        Text="This mirrors the intended dial / Actions Ring behavior until supported MX hardware is connected." />
                             <Slider x:Name="DialSlider"
                                     Margin="0,14,0,0"
@@ -306,6 +344,48 @@
                                FontSize="11"
                                TextWrapping="Wrap"
                                Text="Hotkeys: Ctrl+Alt+Space = Trigger   |   Ctrl+Alt+A = Take Action   |   Ctrl+Alt+V = Voice" />
+                </Border>
+
+                <Border Grid.Row="6"
+                        Margin="0,14,0,0"
+                        CornerRadius="20"
+                        Background="#56111B27"
+                        BorderBrush="#28FFFFFF"
+                        BorderThickness="1"
+                        Padding="14,12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource HeadlineTextStyle}"
+                                   FontSize="12"
+                                   Text="Dev" />
+                        <Grid Grid.Row="1" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ApiKeyTextBox"
+                                     MinWidth="220"
+                                     Height="38"
+                                     Margin="0,0,12,0"
+                                     VerticalContentAlignment="Center"
+                                     Background="#B10E1721"
+                                     BorderBrush="#44B6D7FF"
+                                     BorderThickness="1"
+                                     Foreground="#FFF6FBFF"
+                                     Padding="10,6"
+                                     TextWrapping="NoWrap" />
+                            <Button x:Name="SetApiKeyButton"
+                                    Grid.Column="1"
+                                    Width="70"
+                                    Height="38"
+                                    Style="{StaticResource GlassButtonStyle}"
+                                    Content="Set"
+                                    Click="SetApiKeyButton_OnClick" />
+                        </Grid>
+                    </Grid>
                 </Border>
 
                 <Border Grid.Row="7"
@@ -335,6 +415,7 @@
                     </StackPanel>
                 </Border>
             </Grid>
+            </ScrollViewer>
         </Border>
     </Border>
 </Window>

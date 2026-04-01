@@ -19,6 +19,12 @@ public sealed class SettingsService
 
     public async Task<InteractionMode?> TryLoadModeAsync()
     {
+        var settings = await TryLoadSettingsAsync();
+        return settings?.Mode;
+    }
+
+    public async Task<CompanionSettings?> TryLoadSettingsAsync()
+    {
         if (!File.Exists(_settingsPath))
         {
             return null;
@@ -31,13 +37,51 @@ public sealed class SettingsService
             return null;
         }
 
-        return Enum.TryParse<InteractionMode>(settings.Mode, true, out var mode) ? mode : null;
+        var mode = Enum.TryParse<InteractionMode>(settings.Mode, true, out var parsedMode)
+            ? parsedMode
+            : InteractionMode.Smart;
+
+        var takeActionPreference = Enum.TryParse<TakeActionPromptPreference>(settings.TakeActionPromptPreference, true, out var parsedPreference)
+            ? parsedPreference
+            : TakeActionPromptPreference.AlwaysAskToRun;
+
+        var showOrbDuringWorkflow = settings.ShowOrbDuringWorkflow ?? true;
+        return new CompanionSettings(mode, showOrbDuringWorkflow, takeActionPreference);
     }
 
     public async Task SaveModeAsync(InteractionMode mode)
     {
+        var settings = await TryLoadSettingsAsync()
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+
+        await SaveSettingsAsync(settings with { Mode = mode });
+    }
+
+    public async Task SaveShowOrbDuringWorkflowAsync(bool showOrbDuringWorkflow)
+    {
+        var settings = await TryLoadSettingsAsync()
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+
+        await SaveSettingsAsync(settings with { ShowOrbDuringWorkflow = showOrbDuringWorkflow });
+    }
+
+    public async Task SaveTakeActionPromptPreferenceAsync(TakeActionPromptPreference preference)
+    {
+        var settings = await TryLoadSettingsAsync()
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+
+        await SaveSettingsAsync(settings with { TakeActionPromptPreference = preference });
+    }
+
+    public async Task SaveSettingsAsync(CompanionSettings settings)
+    {
         Directory.CreateDirectory(_settingsDir);
-        var payload = new SettingsData { Mode = mode.ToString() };
+        var payload = new SettingsData
+        {
+            Mode = settings.Mode.ToString(),
+            ShowOrbDuringWorkflow = settings.ShowOrbDuringWorkflow,
+            TakeActionPromptPreference = settings.TakeActionPromptPreference.ToString()
+        };
         var json = JsonSerializer.Serialize(payload, _jsonOptions);
         await File.WriteAllTextAsync(_settingsPath, json);
     }
@@ -45,5 +89,9 @@ public sealed class SettingsService
     private sealed class SettingsData
     {
         public string Mode { get; set; } = InteractionMode.Smart.ToString();
+
+        public bool? ShowOrbDuringWorkflow { get; set; }
+
+        public string TakeActionPromptPreference { get; set; } = Models.TakeActionPromptPreference.AlwaysAskToRun.ToString();
     }
 }

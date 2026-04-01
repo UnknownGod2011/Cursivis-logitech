@@ -2,6 +2,7 @@ using Cursivis.Companion.Models;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Shapes;
 
 namespace Cursivis.Companion.Views;
@@ -79,13 +80,7 @@ public partial class LassoOverlayWindow : Window
             return;
         }
 
-        var topLeft = PointToScreen(new Point(x, y));
-        var bottomRight = PointToScreen(new Point(x + width, y + height));
-        var absoluteX = (int)Math.Round(Math.Min(topLeft.X, bottomRight.X));
-        var absoluteY = (int)Math.Round(Math.Min(topLeft.Y, bottomRight.Y));
-        var absoluteWidth = (int)Math.Round(Math.Abs(bottomRight.X - topLeft.X));
-        var absoluteHeight = (int)Math.Round(Math.Abs(bottomRight.Y - topLeft.Y));
-        var region = new Int32Rect(absoluteX, absoluteY, absoluteWidth, absoluteHeight);
+        var region = BuildPhysicalScreenRegion(x, y, width, height);
 
         Hide();
         SelectionCompleted?.Invoke(this, new LassoSelectionResult
@@ -95,6 +90,38 @@ public partial class LassoOverlayWindow : Window
         });
 
         Close();
+    }
+
+    private Int32Rect BuildPhysicalScreenRegion(double x, double y, double width, double height)
+    {
+        var topLeft = new Point(Left + x, Top + y);
+        var bottomRight = new Point(Left + x + width, Top + y + height);
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is not null)
+        {
+            var transform = source.CompositionTarget.TransformToDevice;
+            topLeft = transform.Transform(topLeft);
+            bottomRight = transform.Transform(bottomRight);
+            return CreateScreenRegion(topLeft, bottomRight);
+        }
+
+        return CreateScreenRegion(
+            PointToScreen(new Point(x, y)),
+            PointToScreen(new Point(x + width, y + height)));
+    }
+
+    private static Int32Rect CreateScreenRegion(Point firstPoint, Point secondPoint)
+    {
+        var left = (int)Math.Floor(Math.Min(firstPoint.X, secondPoint.X));
+        var top = (int)Math.Floor(Math.Min(firstPoint.Y, secondPoint.Y));
+        var right = (int)Math.Ceiling(Math.Max(firstPoint.X, secondPoint.X));
+        var bottom = (int)Math.Ceiling(Math.Max(firstPoint.Y, secondPoint.Y));
+
+        return new Int32Rect(
+            left,
+            top,
+            Math.Max(1, right - left),
+            Math.Max(1, bottom - top));
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
