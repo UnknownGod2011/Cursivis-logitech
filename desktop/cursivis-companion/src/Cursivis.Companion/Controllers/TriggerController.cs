@@ -272,7 +272,13 @@ public sealed class TriggerController : IDisposable
             return false;
         }
 
-        NavigateGuidedMenu(delta);
+        var stepDirection = Math.Sign(delta);
+        var stepCount = Math.Abs(delta);
+        for (var i = 0; i < stepCount; i++)
+        {
+            NavigateGuidedMenu(stepDirection);
+        }
+
         return true;
     }
 

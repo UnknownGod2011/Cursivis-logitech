@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace Cursivis.Companion.Views;
 
@@ -109,6 +110,8 @@ public partial class ResultPanelWindow : Window
 
     private bool _isUserPositioned;
     private bool _hasInitialPlacement;
+    private bool _isHiding;
+    private int _hideAnimationVersion;
     private CancellationTokenSource? _revealCts;
 
     public ResultPanelWindow()
@@ -119,7 +122,7 @@ public partial class ResultPanelWindow : Window
         {
             if (IsVisible)
             {
-                Hide();
+                HidePanel();
             }
         };
     }
@@ -167,10 +170,68 @@ public partial class ResultPanelWindow : Window
 
     public void HidePanel()
     {
-        if (IsVisible)
+        if (!IsVisible || _isHiding)
         {
-            Hide();
+            return;
         }
+
+        _isHiding = true;
+        var animationVersion = ++_hideAnimationVersion;
+
+        RootCard.BeginAnimation(UIElement.OpacityProperty, null);
+        PanelTranslateTransform.BeginAnimation(TranslateTransform.YProperty, null);
+
+        var fadeOut = new DoubleAnimation
+        {
+            From = RootCard.Opacity,
+            To = 0,
+            Duration = TimeSpan.FromMilliseconds(135),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+
+        var slideOut = new DoubleAnimation
+        {
+            From = PanelTranslateTransform.Y,
+            To = 10,
+            Duration = TimeSpan.FromMilliseconds(135),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+        };
+
+        fadeOut.Completed += (_, _) =>
+        {
+            if (animationVersion != _hideAnimationVersion)
+            {
+                return;
+            }
+
+            RootCard.BeginAnimation(UIElement.OpacityProperty, null);
+            PanelTranslateTransform.BeginAnimation(TranslateTransform.YProperty, null);
+            RootCard.Opacity = 1;
+            PanelTranslateTransform.Y = 0;
+            _isHiding = false;
+
+            if (IsVisible)
+            {
+                Hide();
+            }
+        };
+
+        RootCard.BeginAnimation(UIElement.OpacityProperty, fadeOut, HandoffBehavior.SnapshotAndReplace);
+        PanelTranslateTransform.BeginAnimation(TranslateTransform.YProperty, slideOut, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    public bool ContainsScreenPoint(Point screenPoint)
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        var localPoint = PointFromScreen(screenPoint);
+        return localPoint.X >= 0 &&
+               localPoint.Y >= 0 &&
+               localPoint.X <= ActualWidth &&
+               localPoint.Y <= ActualHeight;
     }
 
     private void InsertButton_OnClick(object sender, RoutedEventArgs e)
@@ -232,10 +293,25 @@ public partial class ResultPanelWindow : Window
 
     private void EnsureShown()
     {
+        _hideAnimationVersion++;
+        _isHiding = false;
+        RootCard.BeginAnimation(UIElement.OpacityProperty, null);
+        PanelTranslateTransform.BeginAnimation(TranslateTransform.YProperty, null);
+        RootCard.Opacity = 1;
+        PanelTranslateTransform.Y = 0;
+
         if (!IsVisible)
         {
             Show();
         }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Topmost = true;
+        Activate();
     }
 
     private void StartPresentation(string body)

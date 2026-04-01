@@ -121,6 +121,7 @@ public partial class App : Application
 
             _globalMouseWheelService = new GlobalMouseWheelService();
             _globalMouseWheelService.WheelMoved += GlobalMouseWheelServiceOnWheelMoved;
+            _globalMouseWheelService.MouseButtonPressed += GlobalMouseWheelServiceOnMouseButtonPressed;
             _globalMouseWheelService.Start();
 
             if (!backgroundLaunch)
@@ -194,6 +195,7 @@ public partial class App : Application
         if (_globalMouseWheelService is not null)
         {
             _globalMouseWheelService.WheelMoved -= GlobalMouseWheelServiceOnWheelMoved;
+            _globalMouseWheelService.MouseButtonPressed -= GlobalMouseWheelServiceOnMouseButtonPressed;
             _globalMouseWheelService.Dispose();
         }
         CancelIpcLongPress();
@@ -374,6 +376,27 @@ public partial class App : Application
         }
 
         e.Handled = _triggerController.HandleExternalScrollWheel(e.DeltaStep);
+    }
+
+    private void GlobalMouseWheelServiceOnMouseButtonPressed(object? sender, GlobalMouseButtonEventArgs e)
+    {
+        if (_resultPanelWindow is null || !_resultPanelWindow.IsVisible)
+        {
+            return;
+        }
+
+        Dispatcher.Invoke(() =>
+        {
+            if (_resultPanelWindow is null || !_resultPanelWindow.IsVisible)
+            {
+                return;
+            }
+
+            if (!_resultPanelWindow.ContainsScreenPoint(e.ScreenPoint))
+            {
+                _resultPanelWindow.HidePanel();
+            }
+        });
     }
 
     private async Task PublishHapticAsync(string hapticType, string intensity, params (string Key, string Value)[] metadataEntries)

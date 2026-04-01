@@ -8,8 +8,16 @@ public sealed class GlobalMouseWheelService : IDisposable
     private const int WhMouseLl = 14;
     private const int WmMouseWheel = 0x020A;
     private const int WmMouseHWheel = 0x020E;
+    private const int WmLButtonDown = 0x0201;
+    private const int WmRButtonDown = 0x0204;
+    private const int WmMButtonDown = 0x0207;
+    private const int WmXButtonDown = 0x020B;
+    private const int VerticalWheelDelta = 120;
+    private const int HorizontalWheelDelta = 240;
     private readonly LowLevelMouseProc _hookProc;
     private IntPtr _hookHandle;
+    private int _verticalResidualDelta;
+    private int _horizontalResidualDelta;
 
     public GlobalMouseWheelService()
     {
@@ -17,6 +25,8 @@ public sealed class GlobalMouseWheelService : IDisposable
     }
 
     public event EventHandler<GlobalMouseWheelEventArgs>? WheelMoved;
+
+    public event EventHandler<GlobalMouseButtonEventArgs>? MouseButtonPressed;
 
     public void Start()
     {
@@ -49,24 +59,64 @@ public sealed class GlobalMouseWheelService : IDisposable
 
     private IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
     {
-        if (code >= 0 && (wParam == (IntPtr)WmMouseWheel || wParam == (IntPtr)WmMouseHWheel))
+        if (code >= 0)
         {
             var payload = Marshal.PtrToStructure<MsllHookStruct>(lParam);
-            var delta = (short)((payload.mouseData >> 16) & 0xffff);
-            if (delta != 0)
+            if (wParam == (IntPtr)WmMouseWheel || wParam == (IntPtr)WmMouseHWheel)
             {
-                var args = new GlobalMouseWheelEventArgs(
-                    delta > 0 ? 1 : -1,
-                    wParam == (IntPtr)WmMouseHWheel ? MouseWheelAxis.Horizontal : MouseWheelAxis.Vertical);
-                WheelMoved?.Invoke(this, args);
-                if (args.Handled)
+                var rawDelta = (short)((payload.mouseData >> 16) & 0xffff);
+                if (rawDelta != 0)
                 {
-                    return new IntPtr(1);
+                    var axis = wParam == (IntPtr)WmMouseHWheel ? MouseWheelAxis.Horizontal : MouseWheelAxis.Vertical;
+                    var stepDelta = ConsumeWheelSteps(rawDelta, axis);
+                    if (stepDelta == 0)
+                    {
+                        return CallNextHookEx(_hookHandle, code, wParam, lParam);
+                    }
+
+                    var args = new GlobalMouseWheelEventArgs(
+                        stepDelta,
+                        axis);
+                    WheelMoved?.Invoke(this, args);
+                    if (args.Handled)
+                    {
+                        return new IntPtr(1);
+                    }
                 }
+            }
+            else if (wParam == (IntPtr)WmLButtonDown ||
+                     wParam == (IntPtr)WmRButtonDown ||
+                     wParam == (IntPtr)WmMButtonDown ||
+                     wParam == (IntPtr)WmXButtonDown)
+            {
+                MouseButtonPressed?.Invoke(this, new GlobalMouseButtonEventArgs(
+                    new System.Windows.Point(payload.pt.x, payload.pt.y)));
             }
         }
 
         return CallNextHookEx(_hookHandle, code, wParam, lParam);
+    }
+
+    private int ConsumeWheelSteps(int rawDelta, MouseWheelAxis axis)
+    {
+        ref var residual = ref axis == MouseWheelAxis.Horizontal
+            ? ref _horizontalResidualDelta
+            : ref _verticalResidualDelta;
+        var threshold = axis == MouseWheelAxis.Horizontal ? HorizontalWheelDelta : VerticalWheelDelta;
+
+        if (residual != 0 && Math.Sign(residual) != Math.Sign(rawDelta))
+        {
+            residual = 0;
+        }
+
+        residual += rawDelta;
+        var steps = residual / threshold;
+        if (steps != 0)
+        {
+            residual %= threshold;
+        }
+
+        return steps;
     }
 
     private delegate IntPtr LowLevelMouseProc(int code, IntPtr wParam, IntPtr lParam);
@@ -114,4 +164,9 @@ public sealed class GlobalMouseWheelEventArgs(int deltaStep, MouseWheelAxis axis
     public MouseWheelAxis Axis { get; } = axis;
 
     public bool Handled { get; set; }
+}
+
+public sealed class GlobalMouseButtonEventArgs(System.Windows.Point screenPoint) : EventArgs
+{
+    public System.Windows.Point ScreenPoint { get; } = screenPoint;
 }
