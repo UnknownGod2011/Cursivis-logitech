@@ -4,6 +4,7 @@ using Cursivis.Companion.Services;
 using Cursivis.Companion.Views;
 using System.Threading;
 using System.Windows;
+using System.Windows.Interop;
 
 namespace Cursivis.Companion;
 
@@ -55,6 +56,25 @@ public partial class App : Application
             _showOrbDuringWorkflow = savedSettings.ShowOrbDuringWorkflow;
             _takeActionPromptPreference = savedSettings.TakeActionPromptPreference;
             await _settingsService.SaveSettingsAsync(savedSettings);
+            try
+            {
+                var startupRegistrationService = new StartupRegistrationService();
+                await startupRegistrationService.EnsureRegisteredAsync();
+            }
+            catch
+            {
+                // Keep the runtime usable even if startup registration fails.
+            }
+
+            try
+            {
+                var hotkeyHostService = new HotkeyHostService();
+                await hotkeyHostService.EnsureRunningAsync();
+            }
+            catch
+            {
+                // Keep the runtime usable even if the hotkey host is unavailable.
+            }
 
             var backgroundLaunch = e.Args.Any(arg => string.Equals(arg, "--background", StringComparison.OrdinalIgnoreCase));
             var runtimeBootstrapper = new RuntimeBootstrapper();
@@ -124,7 +144,13 @@ public partial class App : Application
             _globalMouseWheelService.MouseButtonPressed += GlobalMouseWheelServiceOnMouseButtonPressed;
             _globalMouseWheelService.Start();
 
-            if (!backgroundLaunch)
+            if (backgroundLaunch)
+            {
+                // Force the native window handle into existence so SourceInitialized
+                // registers global hotkeys even when the settings window stays hidden.
+                _ = new WindowInteropHelper(_mainWindow).EnsureHandle();
+            }
+            else
             {
                 _mainWindow.Show();
             }

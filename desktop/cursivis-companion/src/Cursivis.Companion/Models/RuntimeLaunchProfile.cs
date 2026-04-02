@@ -12,6 +12,8 @@ public sealed class RuntimeLaunchProfile
 
     public string CompanionExecutable { get; set; } = string.Empty;
 
+    public string HotkeyHostExecutable { get; set; } = string.Empty;
+
     public string BackendUrl { get; set; } = "http://127.0.0.1:8080";
 
     public string BrowserAgentUrl { get; set; } = "http://127.0.0.1:48820";

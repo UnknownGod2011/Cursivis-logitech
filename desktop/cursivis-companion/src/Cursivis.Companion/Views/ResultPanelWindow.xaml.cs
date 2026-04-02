@@ -297,12 +297,17 @@ public partial class ResultPanelWindow : Window
         _isHiding = false;
         RootCard.BeginAnimation(UIElement.OpacityProperty, null);
         PanelTranslateTransform.BeginAnimation(TranslateTransform.YProperty, null);
-        RootCard.Opacity = 1;
-        PanelTranslateTransform.Y = 0;
 
         if (!IsVisible)
         {
+            RootCard.Opacity = 0;
+            PanelTranslateTransform.Y = 18;
             Show();
+        }
+        else
+        {
+            RootCard.Opacity = 1;
+            PanelTranslateTransform.Y = 0;
         }
 
         if (WindowState == WindowState.Minimized)
