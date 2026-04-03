@@ -1,18 +1,20 @@
 {
-  "backgroundColor": 4281732918,
+  "backgroundColor": 4279507000,
   "items": [
     {
-      "text": "SNIP",
-      "textColor": 4294967295,
-      "fontSize": 20,
-      "fontName": "Brown Logitech Pan Bold",
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMzAgMjRoMTJ2MTIiLz48cGF0aCBkPSJNNzAgMjRINTh2MTIiLz48cGF0aCBkPSJNMzAgNzZoMTJWNjQiLz48cGF0aCBkPSJNNzAgNzZINThWNjQiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIxMCIvPjwvc3ZnPg==",
+      "imageFileName": "snip-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
       "isVisible": true,
-      "itemType": "Text",
+      "itemType": "Image",
       "area": {
-        "x": 6,
-        "y": 24,
-        "width": 88,
-        "height": 36
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
       }
     }
   ]

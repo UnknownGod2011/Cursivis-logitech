@@ -2,17 +2,19 @@
   "backgroundColor": 4279507000,
   "items": [
     {
-      "text": "GO",
-      "textColor": 4289784063,
-      "fontSize": 28,
-      "fontName": "Brown Logitech Pan Bold",
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBkPSJNMzggMjdMNzMgNTBMMzggNzNWMjdaIiBmaWxsPSIjRjVGN0ZBIi8+PC9zdmc+",
+      "imageFileName": "go-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
       "isVisible": true,
-      "itemType": "Text",
+      "itemType": "Image",
       "area": {
-        "x": 10,
-        "y": 24,
-        "width": 84,
-        "height": 36
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
       }
     }
   ]

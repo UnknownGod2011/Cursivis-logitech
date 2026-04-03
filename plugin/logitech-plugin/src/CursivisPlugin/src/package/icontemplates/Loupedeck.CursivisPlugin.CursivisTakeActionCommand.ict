@@ -1,18 +1,20 @@
 {
-  "backgroundColor": 4280098071,
+  "backgroundColor": 4279507000,
   "items": [
     {
-      "text": "ACT",
-      "textColor": 4294967295,
-      "fontSize": 26,
-      "fontName": "Brown Logitech Pan Bold",
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjggMjJsMjIgNTEgOC0xOCAxOC04LTQ4LTI1eiIgZmlsbD0iI0Y1RjdGQSIgc3Ryb2tlPSJub25lIi8+PHBhdGggZD0iTTY5IDIwdjEyIi8+PHBhdGggZD0iTTYzIDI2aDEyIi8+PC9zdmc+",
+      "imageFileName": "action-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
       "isVisible": true,
-      "itemType": "Text",
+      "itemType": "Image",
       "area": {
-        "x": 10,
-        "y": 24,
-        "width": 84,
-        "height": 36
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
       }
     }
   ]

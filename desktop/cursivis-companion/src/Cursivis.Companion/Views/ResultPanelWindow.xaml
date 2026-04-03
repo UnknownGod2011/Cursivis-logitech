@@ -92,8 +92,7 @@
                                 Click="ThemeToggleButton_OnClick" />
                         <Button x:Name="SettingsButton"
                                 Style="{StaticResource PanelIconButtonStyle}"
-                                FontFamily="Segoe MDL2 Assets"
-                                Content="&#xE713;"
+                                FontFamily="Segoe UI Symbol"
                                 ToolTip="Settings"
                                 Click="SettingsButton_OnClick" />
                     </StackPanel>

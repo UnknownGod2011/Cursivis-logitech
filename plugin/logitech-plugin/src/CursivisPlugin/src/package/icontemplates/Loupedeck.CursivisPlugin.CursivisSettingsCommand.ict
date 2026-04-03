@@ -1,18 +1,20 @@
 {
-  "backgroundColor": 4279965978,
+  "backgroundColor": 4279507000,
   "items": [
     {
-      "text": "SET",
-      "textColor": 4294508543,
-      "fontSize": 24,
-      "fontName": "Brown Logitech Pan Bold",
+      "$type": "Loupedeck.Service.ActionIconImageItem, LoupedeckShared",
+      "image": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNGNUY3RkEiIHN0cm9rZS13aWR0aD0iNS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjEyIi8+PHBhdGggZD0iTTUwIDIydjgiLz48cGF0aCBkPSJNNTAgNzB2OCIvPjxwYXRoIGQ9Ik0yMiA1MGg4Ii8+PHBhdGggZD0iTTcwIDUwaDgiLz48cGF0aCBkPSJNMzEgMzFsNiA2Ii8+PHBhdGggZD0iTTYzIDYzbDYgNiIvPjxwYXRoIGQ9Ik02OSAzMWwtNiA2Ii8+PHBhdGggZD0iTTM3IDYzbC02IDYiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIyMiIvPjwvc3ZnPg==",
+      "imageFileName": "settings-icon.svg",
+      "imageColor": 4294967295,
+      "imageRotation": "None",
       "isVisible": true,
-      "itemType": "Text",
+      "itemType": "Image",
       "area": {
-        "x": 10,
-        "y": 24,
-        "width": 84,
-        "height": 36
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100,
+        "isFullScreen": true
       }
     }
   ]

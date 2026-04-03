@@ -2,6 +2,7 @@ using Cursivis.Companion.Infrastructure;
 using Cursivis.Companion.Models;
 using Cursivis.Companion.Services;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -12,11 +13,16 @@ using System.Windows.Documents;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 
 namespace Cursivis.Companion.Views;
 
 public partial class ResultPanelWindow : Window
 {
+    private const string ThemeSunDarkIconPath = @"C:\Users\Admin\Downloads\theme-sun-dark.png";
+    private const string SettingsGearDarkIconPath = @"C:\Users\Admin\Downloads\settings-gear-dark.png";
+
     private static readonly Regex HeadingRegex = new(@"^\s{0,3}(#{1,6})\s*(.+)$", RegexOptions.Compiled);
     private static readonly Regex BulletRegex = new(@"^\s*[-*]\s+(.+)$", RegexOptions.Compiled);
     private static readonly Regex NumberedRegex = new(@"^\s*\d+\.\s+(.+)$", RegexOptions.Compiled);
@@ -805,15 +811,215 @@ public partial class ResultPanelWindow : Window
             themeMode == CompanionThemeMode.Dark ? 2.65 : 3.35,
             themeMode == CompanionThemeMode.Dark ? 0.94 : 0.32,
             themeMode == CompanionThemeMode.Dark ? 1.08 : 1.04);
-        ThemeToggleButton.Content = themeMode == CompanionThemeMode.Dark ? "☼" : "☾";
+        ApplyThemeToggleIcon(themeMode);
         ThemeToggleButton.ToolTip = themeMode == CompanionThemeMode.Dark
             ? "Switch to light mode"
             : "Switch to dark mode";
-        ThemeToggleButton.Content = themeMode == CompanionThemeMode.Dark ? "\u2600" : "\u263E";
-        SettingsButton.Content = "\uE713";
+        ApplySettingsIcon(themeMode);
         SettingsButton.ToolTip = "Settings";
         ApplyHeaderButtonChrome(themeMode);
     }
+
+    private void ApplyThemeToggleIcon(CompanionThemeMode themeMode)
+    {
+        if (themeMode == CompanionThemeMode.Dark)
+        {
+            if (TrySetButtonImage(ThemeToggleButton, ThemeSunDarkIconPath, 15, ColorFromHex("#FFF6F8FB")))
+            {
+                return;
+            }
+
+            ThemeToggleButton.FontFamily = new FontFamily("Segoe UI Symbol");
+            ThemeToggleButton.Content = "\u2600";
+            return;
+        }
+
+        ThemeToggleButton.FontFamily = new FontFamily("Segoe UI Symbol");
+        ThemeToggleButton.Content = "\u263E";
+    }
+
+    private void ApplySettingsIcon(CompanionThemeMode themeMode)
+    {
+        var tintColor = themeMode == CompanionThemeMode.Dark
+            ? ColorFromHex("#FFF6F8FB")
+            : ColorFromHex("#FF1F252B");
+
+        if (TrySetButtonImage(SettingsButton, SettingsGearDarkIconPath, 15, tintColor))
+        {
+            return;
+        }
+
+        SettingsButton.FontFamily = new FontFamily("Segoe UI Symbol");
+        SettingsButton.Content = "\u2699";
+    }
+
+    private static bool TrySetButtonImage(Button button, string path, double size, Color tintColor)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var imageSource = LoadPreparedIconMask(path);
+            if (imageSource is null)
+            {
+                return false;
+            }
+
+            button.FontFamily = new FontFamily("Segoe UI");
+            button.Content = new Rectangle
+            {
+                Width = size,
+                Height = size,
+                Fill = CreateBrush(tintColor),
+                OpacityMask = new ImageBrush(imageSource) { Stretch = Stretch.Uniform },
+                SnapsToDevicePixels = true,
+                UseLayoutRounding = true
+            };
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static SolidColorBrush CreateBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static ImageSource? LoadPreparedIconMask(string path)
+    {
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.UriSource = new Uri(path, UriKind.Absolute);
+        bitmap.EndInit();
+        bitmap.Freeze();
+
+        var converted = new FormatConvertedBitmap();
+        converted.BeginInit();
+        converted.Source = bitmap;
+        converted.DestinationFormat = PixelFormats.Bgra32;
+        converted.EndInit();
+        converted.Freeze();
+
+        var stride = converted.PixelWidth * 4;
+        var pixels = new byte[stride * converted.PixelHeight];
+        converted.CopyPixels(pixels, stride, 0);
+
+        var background = SampleBackgroundColor(pixels, stride, converted.PixelWidth, converted.PixelHeight);
+        var maskPixels = new byte[pixels.Length];
+        var minX = converted.PixelWidth;
+        var minY = converted.PixelHeight;
+        var maxX = -1;
+        var maxY = -1;
+
+        for (var y = 0; y < converted.PixelHeight; y++)
+        {
+            for (var x = 0; x < converted.PixelWidth; x++)
+            {
+                var baseIndex = (y * stride) + (x * 4);
+                var blue = pixels[baseIndex];
+                var green = pixels[baseIndex + 1];
+                var red = pixels[baseIndex + 2];
+                var alpha = pixels[baseIndex + 3];
+
+                var maskAlpha = alpha;
+                if (maskAlpha <= 8)
+                {
+                    var difference = Math.Max(
+                        Math.Abs(red - background.R),
+                        Math.Max(
+                            Math.Abs(green - background.G),
+                            Math.Abs(blue - background.B)));
+
+                    if (difference >= 18)
+                    {
+                        maskAlpha = (byte)Math.Min(255, 40 + (difference * 5));
+                    }
+                }
+
+                if (maskAlpha <= 8)
+                {
+                    continue;
+                }
+
+                maskPixels[baseIndex] = 255;
+                maskPixels[baseIndex + 1] = 255;
+                maskPixels[baseIndex + 2] = 255;
+                maskPixels[baseIndex + 3] = maskAlpha;
+
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        if (maxX < minX || maxY < minY)
+        {
+            return bitmap;
+        }
+
+        var maskBitmap = BitmapSource.Create(
+            converted.PixelWidth,
+            converted.PixelHeight,
+            converted.DpiX,
+            converted.DpiY,
+            PixelFormats.Bgra32,
+            null,
+            maskPixels,
+            stride);
+        maskBitmap.Freeze();
+
+        var padding = 6;
+        minX = Math.Max(0, minX - padding);
+        minY = Math.Max(0, minY - padding);
+        maxX = Math.Min(converted.PixelWidth - 1, maxX + padding);
+        maxY = Math.Min(converted.PixelHeight - 1, maxY + padding);
+
+        var cropWidth = maxX - minX + 1;
+        var cropHeight = maxY - minY + 1;
+        var cropped = new CroppedBitmap(maskBitmap, new Int32Rect(minX, minY, cropWidth, cropHeight));
+        cropped.Freeze();
+        return cropped;
+    }
+
+    private static Color SampleBackgroundColor(byte[] pixels, int stride, int width, int height)
+    {
+        var points = new[]
+        {
+            new Point(2, 2),
+            new Point(Math.Max(2, width - 3), 2),
+            new Point(2, Math.Max(2, height - 3)),
+            new Point(Math.Max(2, width - 3), Math.Max(2, height - 3))
+        };
+
+        var red = 0;
+        var green = 0;
+        var blue = 0;
+
+        foreach (var point in points)
+        {
+            var index = (((int)point.Y) * stride) + (((int)point.X) * 4);
+            blue += pixels[index];
+            green += pixels[index + 1];
+            red += pixels[index + 2];
+        }
+
+        return Color.FromRgb(
+            (byte)(red / points.Length),
+            (byte)(green / points.Length),
+            (byte)(blue / points.Length));
+    }
+
 
     private void ApplyHeaderButtonChrome(CompanionThemeMode themeMode)
     {
