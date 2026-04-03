@@ -51,10 +51,11 @@ public partial class App : Application
         {
             _settingsService = new SettingsService();
             var savedSettings = await _settingsService.TryLoadSettingsAsync()
-                ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+                ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark);
             var mode = savedSettings.Mode;
             _showOrbDuringWorkflow = savedSettings.ShowOrbDuringWorkflow;
             _takeActionPromptPreference = savedSettings.TakeActionPromptPreference;
+            CompanionThemeService.Apply(savedSettings.ThemeMode);
             await _settingsService.SaveSettingsAsync(savedSettings);
             try
             {
@@ -95,6 +96,8 @@ public partial class App : Application
             var voiceCommandPromptService = new VoiceCommandPromptService(_geminiClient, voiceCaptureService);
             _orbOverlayWindow = new OrbOverlayWindow();
             _resultPanelWindow = new ResultPanelWindow();
+            _resultPanelWindow.SettingsRequested += ResultPanelWindowOnSettingsRequested;
+            _resultPanelWindow.ThemeToggleRequested += ResultPanelWindowOnThemeToggleRequested;
 
             _triggerController = new TriggerController(
                 _cursorTracker,
@@ -209,6 +212,12 @@ public partial class App : Application
             _triggerIpcServer.Dispose();
         }
 
+        if (_resultPanelWindow is not null)
+        {
+            _resultPanelWindow.SettingsRequested -= ResultPanelWindowOnSettingsRequested;
+            _resultPanelWindow.ThemeToggleRequested -= ResultPanelWindowOnThemeToggleRequested;
+        }
+
         if (_triggerController is not null)
         {
             _triggerController.OnActionChange -= TriggerControllerOnActionChange;
@@ -306,19 +315,24 @@ public partial class App : Application
             return;
         }
 
-        _mainWindow.Opacity = 1;
-        _mainWindow.ShowInTaskbar = true;
+        _triggerController?.CollapseTransientUi();
+        _resultPanelWindow?.HidePanel();
+        _orbOverlayWindow?.Hide();
+        _mainWindow.ShowForSettings();
+    }
 
-        if (!_mainWindow.IsVisible)
+    private void ResultPanelWindowOnSettingsRequested(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(ShowSettingsWindow);
+    }
+
+    private async void ResultPanelWindowOnThemeToggleRequested(object? sender, CompanionThemeMode themeMode)
+    {
+        CompanionThemeService.Apply(themeMode);
+        if (_settingsService is not null)
         {
-            _mainWindow.Show();
+            await _settingsService.SaveThemeModeAsync(themeMode);
         }
-
-        _mainWindow.WindowState = WindowState.Normal;
-        _mainWindow.Topmost = true;
-        _mainWindow.Activate();
-        _mainWindow.Focus();
-        _mainWindow.Topmost = true;
     }
 
     private void StartIpcLongPress()

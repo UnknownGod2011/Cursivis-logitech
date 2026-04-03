@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Cursivis Companion"
         Height="700"
-        Width="432"
-        MinWidth="400"
+        Width="456"
+        MinWidth="428"
         MinHeight="620"
         ResizeMode="CanResizeWithGrip"
         Topmost="True"
@@ -13,22 +13,25 @@
         Top="20"
         KeyDown="MainWindow_OnKeyDown"
         PreviewMouseLeftButtonUp="MainWindow_OnPreviewMouseLeftButtonUp">
-    <Border Background="{StaticResource Brush.WindowGradient}" Padding="10">
+    <Border Background="{DynamicResource Brush.WindowGradient}" Padding="10">
         <Border CornerRadius="24"
-                BorderBrush="#30FFFFFF"
+                BorderBrush="{DynamicResource Brush.WindowBorder}"
                 BorderThickness="1"
-                Background="#E608111A"
-                Padding="18">
+                Background="{DynamicResource Brush.SurfaceGlass}"
+                Padding="16">
             <Border.Effect>
-                <DropShadowEffect BlurRadius="30"
+                <DropShadowEffect BlurRadius="26"
                                   ShadowDepth="0"
-                                  Color="#99112939"
-                                  Opacity="0.85" />
+                                  Color="#66000000"
+                                  Opacity="0.34" />
             </Border.Effect>
             <ScrollViewer VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled"
                           Focusable="False"
                           Padding="0">
+                <ScrollViewer.Resources>
+                    <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                </ScrollViewer.Resources>
             <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -43,47 +46,53 @@
 
                 <Border Grid.Row="0"
                         CornerRadius="22"
-                        Background="#66131C28"
-                        BorderBrush="#3AFFFFFF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
                         BorderThickness="1"
                         Padding="18,16,18,14">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                        <StackPanel>
+                        <DockPanel Grid.Row="0"
+                                   LastChildFill="False">
+                            <Border DockPanel.Dock="Right"
+                                    Margin="12,0,0,0"
+                                    Padding="11,7"
+                                    CornerRadius="13"
+                                    Background="{DynamicResource Brush.HeroBadgeBackground}"
+                                    BorderBrush="{DynamicResource Brush.HeroBadgeBorder}"
+                                    BorderThickness="1"
+                                    VerticalAlignment="Top">
+                                <TextBlock Style="{StaticResource SubtleTextStyle}"
+                                           FontSize="10.5"
+                                           Foreground="{DynamicResource Brush.HeroBadgeText}"
+                                           Text="Logitech-ready" />
+                            </Border>
+
                             <TextBlock Style="{StaticResource HeadlineTextStyle}"
-                                       FontSize="26"
-                                       Text="Cursivis Companion" />
-                            <TextBlock Margin="0,6,0,0"
-                                       Style="{StaticResource SubtleTextStyle}"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       Text="Real Logitech plugin runtime and mouse-first workflow controls for daily Cursivis use." />
-                        </StackPanel>
+                                       FontSize="24"
+                                       Text="Cursivis Companion"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
 
-                        <Border Grid.Column="1"
-                                Padding="12,8"
-                                CornerRadius="14"
-                                Background="#9920122A"
-                                BorderBrush="#66F562E7"
-                                BorderThickness="1"
-                                VerticalAlignment="Top">
-                            <TextBlock Style="{StaticResource SubtleTextStyle}"
-                                       FontSize="11"
-                                       Foreground="#FFF0BFFF"
-                                       Text="Logitech-ready" />
-                        </Border>
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,8,0,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="12.5"
+                                   LineHeight="18"
+                                   TextWrapping="Wrap"
+                                   Text="Real Logitech plugin runtime and mouse-first workflow controls for daily Cursivis use." />
                     </Grid>
                 </Border>
 
                 <Border Grid.Row="1"
                         Margin="0,14,0,0"
                         CornerRadius="22"
-                        Background="#77111B27"
-                        BorderBrush="#33A5FFD6"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
                         BorderThickness="1"
                         Padding="16">
                     <Grid>
@@ -177,8 +186,8 @@
                 <Border Grid.Row="2"
                         Margin="0,14,0,0"
                         CornerRadius="22"
-                        Background="#77111B27"
-                        BorderBrush="#33B6D7FF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
                         BorderThickness="1"
                         Padding="16">
                     <Grid>
@@ -196,15 +205,32 @@
                                        TextWrapping="Wrap"
                                        Text="Smart Mode lets Gemini decide. Guided Mode opens staged options." />
                             <ComboBox x:Name="ModeCombo"
-                                      Width="224"
+                                      Width="244"
                                       Style="{StaticResource GlassComboBoxStyle}"
                                       SelectionChanged="ModeCombo_OnSelectionChanged">
                                 <ComboBoxItem Content="Smart Mode (AutoPerform)" Tag="Smart" />
                                 <ComboBoxItem Content="Guided Mode (Manual)" Tag="Guided" />
                             </ComboBox>
+                            <TextBlock Margin="0,14,0,0"
+                                       Style="{StaticResource HeadlineTextStyle}"
+                                       FontSize="12"
+                                       Text="Appearance" />
+                            <ComboBox x:Name="ThemeCombo"
+                                      Width="244"
+                                      Margin="0,10,0,0"
+                                      Style="{StaticResource GlassComboBoxStyle}"
+                                      SelectionChanged="ThemeCombo_OnSelectionChanged">
+                                <ComboBoxItem Content="Dark" Tag="Dark" />
+                                <ComboBoxItem Content="Light" Tag="Light" />
+                            </ComboBox>
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource SubtleTextStyle}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Text="Switches the companion and AI result box between premium dark and light glass themes." />
                             <CheckBox x:Name="ShowOrbDuringWorkflowCheckBox"
                                       Margin="0,12,0,0"
-                                      Foreground="#FFD9EEFF"
+                                      Foreground="{DynamicResource Brush.TextMain}"
                                       FontSize="12"
                                       Content="Show orb during workflows"
                                       Checked="ShowOrbDuringWorkflowCheckBox_OnChanged"
@@ -219,7 +245,7 @@
                                        FontSize="12"
                                        Text="Take Action Prompt" />
                             <ComboBox x:Name="TakeActionPromptCombo"
-                                      Width="224"
+                                      Width="244"
                                       Margin="0,10,0,0"
                                       Style="{StaticResource GlassComboBoxStyle}"
                                       SelectionChanged="TakeActionPromptCombo_OnSelectionChanged">
@@ -234,9 +260,9 @@
                         </StackPanel>
 
                         <Button Grid.Column="1"
-                                Width="86"
+                                Width="78"
                                 Height="42"
-                                Margin="18,0,0,0"
+                                Margin="14,0,0,0"
                                 VerticalAlignment="Top"
                                 Style="{StaticResource MutedButtonStyle}"
                                 Content="Exit"
@@ -247,8 +273,8 @@
                 <Border Grid.Row="3"
                         Margin="0,14,0,0"
                         CornerRadius="22"
-                        Background="#77111B27"
-                        BorderBrush="#33FFFFFF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
                         BorderThickness="1"
                         Padding="16"
                         Visibility="Collapsed">
@@ -303,8 +329,8 @@
                 <Border Grid.Row="4"
                         Margin="0,14,0,0"
                         CornerRadius="22"
-                        Background="#77111B27"
-                        BorderBrush="#33FFFFFF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
                         BorderThickness="1"
                         Padding="16">
                     <Grid>
@@ -335,8 +361,8 @@
                 <Border Grid.Row="5"
                         Margin="0,14,0,0"
                         CornerRadius="20"
-                        Background="#56111B27"
-                        BorderBrush="#28FFFFFF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
                         BorderThickness="1"
                         Padding="14,12">
                     <TextBlock Grid.Row="5"
@@ -349,8 +375,8 @@
                 <Border Grid.Row="6"
                         Margin="0,14,0,0"
                         CornerRadius="20"
-                        Background="#56111B27"
-                        BorderBrush="#28FFFFFF"
+                        Background="{DynamicResource Brush.SectionBackground}"
+                        BorderBrush="{DynamicResource Brush.SectionBorder}"
                         BorderThickness="1"
                         Padding="14,12">
                     <Grid>
@@ -366,21 +392,34 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="ApiKeyTextBox"
-                                     MinWidth="220"
-                                     Height="38"
-                                     Margin="0,0,12,0"
-                                     VerticalContentAlignment="Center"
-                                     Background="#B10E1721"
-                                     BorderBrush="#44B6D7FF"
-                                     BorderThickness="1"
-                                     Foreground="#FFF6FBFF"
-                                     Padding="10,6"
-                                     TextWrapping="NoWrap" />
+                            <Border Grid.Column="0"
+                                    Height="42"
+                                    Margin="0,0,10,0"
+                                    CornerRadius="16"
+                                    Background="{DynamicResource Brush.InputBackground}"
+                                    BorderBrush="{DynamicResource Brush.InputBorder}"
+                                    BorderThickness="1">
+                                <TextBox x:Name="ApiKeyTextBox"
+                                         MinWidth="0"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="14,0"
+                                         VerticalContentAlignment="Center"
+                                         Foreground="{DynamicResource Brush.InputForeground}"
+                                         CaretBrush="{DynamicResource Brush.InputForeground}"
+                                         TextBoxBase.SelectionBrush="{DynamicResource Brush.ButtonAccentBackground}"
+                                         TextBoxBase.SelectionTextBrush="{DynamicResource Brush.ButtonAccentText}"
+                                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                                         FontSize="14"
+                                         FontWeight="SemiBold"
+                                         TextOptions.TextFormattingMode="Display"
+                                         TextAlignment="Left"
+                                         TextWrapping="NoWrap" />
+                            </Border>
                             <Button x:Name="SetApiKeyButton"
                                     Grid.Column="1"
-                                    Width="70"
-                                    Height="38"
+                                    Width="74"
+                                    Height="42"
                                     Style="{StaticResource GlassButtonStyle}"
                                     Content="Set"
                                     Click="SetApiKeyButton_OnClick" />
@@ -391,15 +430,15 @@
                 <Border Grid.Row="7"
                         Margin="0,14,0,0"
                         CornerRadius="22"
-                        Background="#7A101822"
-                        BorderBrush="#66B6D7FF"
+                        Background="{DynamicResource Brush.CardGradient}"
+                        BorderBrush="{DynamicResource Brush.SectionAccentBorder}"
                         BorderThickness="1"
                         Padding="16">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="18"
                                           ShadowDepth="0"
-                                          Color="#4D5EEBFF"
-                                          Opacity="0.35" />
+                                          Color="#33000000"
+                                          Opacity="0.18" />
                     </Border.Effect>
                     <StackPanel>
                         <TextBlock x:Name="SelectedActionText"

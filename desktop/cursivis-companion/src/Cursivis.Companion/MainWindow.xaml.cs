@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _logitechStatusTimer;
     private bool _showOrbDuringWorkflow;
     private TakeActionPromptPreference _takeActionPromptPreference;
+    private CompanionThemeMode _themeMode;
+    private bool _isUpdatingThemeSelection;
     private bool _isUpdatingApiKey;
 
     public MainWindow(TriggerController triggerController, SettingsService settingsService, CompanionSettings initialSettings)
@@ -44,22 +46,25 @@ public partial class MainWindow : Window
         _runtimeGeminiClient = new GeminiClient();
         _showOrbDuringWorkflow = initialSettings.ShowOrbDuringWorkflow;
         _takeActionPromptPreference = initialSettings.TakeActionPromptPreference;
+        _themeMode = initialSettings.ThemeMode;
         InitializeComponent();
 
         _triggerController.OnActionChange += TriggerControllerOnActionChange;
         _triggerController.OnProcessingStart += TriggerControllerOnProcessingStart;
         _triggerController.OnProcessingComplete += TriggerControllerOnProcessingComplete;
         _triggerController.OnModeChanged += TriggerControllerOnModeChanged;
+        CompanionThemeService.ThemeChanged += CompanionThemeServiceOnThemeChanged;
         _triggerController.SetShowOrbDuringWorkflow(_showOrbDuringWorkflow);
         _triggerController.SetTakeActionPromptPreference(_takeActionPromptPreference);
 
         SetModeCombo(initialSettings.Mode);
         SetTakeActionPromptCombo(_takeActionPromptPreference);
+        SetThemeCombo(_themeMode);
         ShowOrbDuringWorkflowCheckBox.IsChecked = _showOrbDuringWorkflow;
+        DataObject.AddPastingHandler(ApiKeyTextBox, ApiKeyTextBox_OnPaste);
         _ = LoadRuntimeApiKeyIntoTextboxAsync();
         _isModeInitialized = true;
         StatusText.Text = $"Status: Ready in {initialSettings.Mode} mode. Press Trigger for text flow.";
-        UiPresentation.ApplyShinyText(StatusText, ColorFromHex("#98B4C8"), ColorFromHex("#FFFFFF"), 2.8);
         _logitechStatusTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(3)
@@ -94,6 +99,8 @@ public partial class MainWindow : Window
         _triggerController.OnProcessingStart -= TriggerControllerOnProcessingStart;
         _triggerController.OnProcessingComplete -= TriggerControllerOnProcessingComplete;
         _triggerController.OnModeChanged -= TriggerControllerOnModeChanged;
+        CompanionThemeService.ThemeChanged -= CompanionThemeServiceOnThemeChanged;
+        DataObject.RemovePastingHandler(ApiKeyTextBox, ApiKeyTextBox_OnPaste);
         _runtimeGeminiClient.Dispose();
         base.OnClosed(e);
     }
@@ -432,6 +439,44 @@ public partial class MainWindow : Window
             : "Status: Result-panel Take Action will show confirmation without the Run preview.";
     }
 
+    private async void ThemeCombo_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isModeInitialized || _isUpdatingThemeSelection)
+        {
+            return;
+        }
+
+        if (ThemeCombo.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+        {
+            return;
+        }
+
+        if (!Enum.TryParse<CompanionThemeMode>(tag, true, out var themeMode))
+        {
+            return;
+        }
+
+        _themeMode = themeMode;
+        CompanionThemeService.Apply(themeMode);
+        await _settingsService.SaveThemeModeAsync(themeMode);
+        StatusText.Text = themeMode == CompanionThemeMode.Dark
+            ? "Status: Dark appearance enabled."
+            : "Status: Light appearance enabled.";
+    }
+
+    private void CompanionThemeServiceOnThemeChanged(object? sender, CompanionThemeMode themeMode)
+    {
+        _themeMode = themeMode;
+
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.InvokeAsync(() => SetThemeCombo(themeMode));
+            return;
+        }
+
+        SetThemeCombo(themeMode);
+    }
+
     private void TriggerControllerOnModeChanged(object? sender, InteractionMode mode)
     {
         SetModeCombo(mode);
@@ -494,6 +539,28 @@ public partial class MainWindow : Window
         TakeActionPromptCombo.SelectedIndex = 0;
     }
 
+    private void SetThemeCombo(CompanionThemeMode themeMode)
+    {
+        _isUpdatingThemeSelection = true;
+        try
+        {
+            foreach (var item in ThemeCombo.Items.OfType<ComboBoxItem>())
+            {
+                if (item.Tag is string tag && string.Equals(tag, themeMode.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    ThemeCombo.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ThemeCombo.SelectedIndex = 0;
+        }
+        finally
+        {
+            _isUpdatingThemeSelection = false;
+        }
+    }
+
     private async Task LoadRuntimeApiKeyIntoTextboxAsync()
     {
         try
@@ -507,6 +574,7 @@ public partial class MainWindow : Window
             ApiKeyTextBox.Text = !string.IsNullOrWhiteSpace(profile.ApiKeys)
                 ? profile.ApiKeys
                 : profile.ApiKey;
+            ResetApiKeyViewport();
         }
         catch
         {
@@ -514,8 +582,39 @@ public partial class MainWindow : Window
         }
     }
 
-    private static System.Windows.Media.Color ColorFromHex(string value)
+    public void ShowForSettings()
     {
-        return (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(value);
+        Opacity = 1;
+        ShowInTaskbar = true;
+
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        WindowState = WindowState.Normal;
+        Topmost = true;
+        Activate();
+        Focus();
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            ApiKeyTextBox.Focus();
+            ResetApiKeyViewport();
+        }, DispatcherPriority.Input);
+    }
+
+    private void ApiKeyTextBox_OnPaste(object sender, DataObjectPastingEventArgs e)
+    {
+        _ = Dispatcher.BeginInvoke(
+            ResetApiKeyViewport,
+            DispatcherPriority.Background);
+    }
+
+    private void ResetApiKeyViewport()
+    {
+        ApiKeyTextBox.CaretIndex = 0;
+        ApiKeyTextBox.Select(0, 0);
+        ApiKeyTextBox.ScrollToHome();
     }
 }

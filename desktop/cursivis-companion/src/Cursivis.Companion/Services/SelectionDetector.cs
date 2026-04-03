@@ -112,10 +112,7 @@ public sealed class SelectionDetector
         }
         finally
         {
-            if (string.IsNullOrWhiteSpace(selectedText) && string.IsNullOrWhiteSpace(selectedImageBase64))
-            {
-                await _clipboardService.RestoreAsync(backup);
-            }
+            await _clipboardService.RestoreAsync(backup, sentinel);
         }
 
         return new SelectionCaptureResult

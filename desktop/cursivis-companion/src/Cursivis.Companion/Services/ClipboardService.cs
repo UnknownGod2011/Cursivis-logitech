@@ -21,12 +21,28 @@ public sealed class ClipboardService
         }).Task;
     }
 
-    public Task RestoreAsync(IDataObject? snapshot)
+    public Task RestoreAsync(IDataObject? snapshot, string? sentinelText = null)
     {
         return Application.Current.Dispatcher.InvokeAsync(() =>
         {
             if (snapshot is null)
             {
+                if (!string.IsNullOrWhiteSpace(sentinelText))
+                {
+                    try
+                    {
+                        if (Clipboard.ContainsText() &&
+                            string.Equals(Clipboard.GetText(), sentinelText, StringComparison.Ordinal))
+                        {
+                            Clipboard.Clear();
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore clipboard races; the sentinel simply won't be visible.
+                    }
+                }
+
                 return;
             }
 

@@ -22,12 +22,6 @@
                     BorderBrush="#40FFFFFF"
                     BorderThickness="1"
                     MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="10"
-                                      ShadowDepth="0"
-                                      Color="#8048B8FF"
-                                      Opacity="0.45" />
-                </Border.Effect>
                 <TextBlock x:Name="ActionTopText"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -47,12 +41,6 @@
                     BorderBrush="#40FFFFFF"
                     BorderThickness="1"
                     MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="10"
-                                      ShadowDepth="0"
-                                      Color="#80F562E7"
-                                      Opacity="0.35" />
-                </Border.Effect>
                 <TextBlock x:Name="ActionUpperRightText"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -72,12 +60,6 @@
                     BorderBrush="#40FFFFFF"
                     BorderThickness="1"
                     MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="10"
-                                      ShadowDepth="0"
-                                      Color="#805EEBFF"
-                                      Opacity="0.35" />
-                </Border.Effect>
                 <TextBlock x:Name="ActionLowerRightText"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -97,12 +79,6 @@
                     BorderBrush="#40FFFFFF"
                     BorderThickness="1"
                     MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="10"
-                                      ShadowDepth="0"
-                                      Color="#80F4D06F"
-                                      Opacity="0.30" />
-                </Border.Effect>
                 <TextBlock x:Name="ActionLowerLeftText"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -122,12 +98,6 @@
                     BorderBrush="#40FFFFFF"
                     BorderThickness="1"
                     MouseLeftButtonUp="ActionChip_OnMouseLeftButtonUp">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="10"
-                                      ShadowDepth="0"
-                                      Color="#805EEBFF"
-                                      Opacity="0.35" />
-                </Border.Effect>
                 <TextBlock x:Name="ActionUpperLeftText"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
@@ -147,7 +117,7 @@
                              Height="140"
                              Canvas.Left="18"
                              Canvas.Top="18"
-                             Stroke="#00F562E7"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="2"
                              Opacity="0" />
                     <Ellipse x:Name="MagicRing2"
@@ -155,7 +125,7 @@
                              Height="150"
                              Canvas.Left="13"
                              Canvas.Top="13"
-                             Stroke="#005EEBFF"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="2"
                              Opacity="0" />
                     <Ellipse x:Name="MagicRing3"
@@ -163,7 +133,7 @@
                              Height="160"
                              Canvas.Left="8"
                              Canvas.Top="8"
-                             Stroke="#00F9CE73"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="2"
                              Opacity="0" />
                     <Ellipse x:Name="MagicRing4"
@@ -171,7 +141,7 @@
                              Height="170"
                              Canvas.Left="3"
                              Canvas.Top="3"
-                             Stroke="#00F562E7"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="1.4"
                              Opacity="0" />
                 </Canvas>
@@ -181,15 +151,9 @@
                          Height="126"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
-                         Opacity="1"
+                         Opacity="0"
                          IsHitTestVisible="False">
-                    <Ellipse.Fill>#01000000</Ellipse.Fill>
-                    <Ellipse.Effect>
-                        <DropShadowEffect BlurRadius="20"
-                                          ShadowDepth="0"
-                                          Color="#7BCBF7FF"
-                                          Opacity="0.45" />
-                    </Ellipse.Effect>
+                    <Ellipse.Fill>#00000000</Ellipse.Fill>
                 </Ellipse>
 
                 <Ellipse x:Name="VoiceGlowHalo"
@@ -205,21 +169,15 @@
                                              RadiusX="0.5"
                                              RadiusY="0.5">
                             <GradientStop Color="#00000000" Offset="0.00" />
-                            <GradientStop Color="#12334C61" Offset="0.56" />
-                            <GradientStop Color="#1E96D8FF" Offset="0.82" />
+                            <GradientStop Color="#00000000" Offset="0.56" />
+                            <GradientStop Color="#00000000" Offset="0.82" />
                             <GradientStop Color="#00000000" Offset="1" />
                         </RadialGradientBrush>
                     </Ellipse.Fill>
                     <Ellipse.Stroke>
-                        <SolidColorBrush Color="#7EDCF5FF" />
+                        <SolidColorBrush Color="#00FFFFFF" />
                     </Ellipse.Stroke>
                     <Ellipse.StrokeThickness>1.4</Ellipse.StrokeThickness>
-                    <Ellipse.Effect>
-                        <DropShadowEffect BlurRadius="20"
-                                          ShadowDepth="0"
-                                          Color="#86BEEAFF"
-                                          Opacity="0.42" />
-                    </Ellipse.Effect>
                     <Ellipse.RenderTransform>
                         <ScaleTransform x:Name="VoiceGlowScaleTransform" ScaleX="1" ScaleY="1" />
                     </Ellipse.RenderTransform>
@@ -230,17 +188,17 @@
                          Height="166"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center"
-                         Opacity="0.9"
+                         Opacity="0"
                          Visibility="Collapsed">
                     <Ellipse.Fill>
                         <RadialGradientBrush Center="0.5,0.5"
                                              GradientOrigin="0.5,0.5"
                                              RadiusX="0.5"
                                              RadiusY="0.5">
-                            <GradientStop Color="#82F562E7" Offset="0.06" />
-                            <GradientStop Color="#575EEBFF" Offset="0.40" />
-                            <GradientStop Color="#045E88A8" Offset="0.86" />
-                            <GradientStop Color="#003B5A64" Offset="1" />
+                            <GradientStop Color="#00FFFFFF" Offset="0.06" />
+                            <GradientStop Color="#00000000" Offset="0.40" />
+                            <GradientStop Color="#00000000" Offset="0.86" />
+                            <GradientStop Color="#00111418" Offset="1" />
                         </RadialGradientBrush>
                     </Ellipse.Fill>
                     <Ellipse.RenderTransform>
@@ -251,6 +209,7 @@
                 <Canvas x:Name="OrbitRingCanvas"
                         Width="176" Height="176"
                         IsHitTestVisible="False"
+                        Visibility="Collapsed"
                         RenderTransformOrigin="0.5,0.5">
                     <Canvas.RenderTransform>
                         <RotateTransform x:Name="OrbitRotateTransform" Angle="0" />
@@ -260,14 +219,14 @@
                              Height="144"
                              Canvas.Left="16"
                              Canvas.Top="16"
-                             Stroke="#45FFFFFF"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="1.2"
                              StrokeDashArray="2 7" />
                     <Ellipse Width="160"
                              Height="160"
                              Canvas.Left="8"
                              Canvas.Top="8"
-                             Stroke="#5567DFFF"
+                             Stroke="#00FFFFFF"
                              StrokeThickness="1"
                              StrokeDashArray="1.5 9" />
                 </Canvas>
@@ -275,19 +234,19 @@
                 <Border x:Name="OrbCore"
                         Width="118"
                         Height="118"
-                        Background="#DD141B23"
-                        BorderBrush="#88FFFFFF"
+                        Background="#F4FFFFFF"
+                        BorderBrush="#20000000"
                         BorderThickness="1"
                         CornerRadius="59"
-                        Cursor="SizeAll"
+                        Cursor="Arrow"
                         MouseLeftButtonDown="OrbCore_OnMouseLeftButtonDown"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center">
                     <Border.Effect>
-                        <DropShadowEffect BlurRadius="22"
+                        <DropShadowEffect BlurRadius="12"
                                           ShadowDepth="0"
                                           Color="#CC08131F"
-                                          Opacity="0.82" />
+                                          Opacity="0.18" />
                     </Border.Effect>
                     <Border.RenderTransform>
                         <ScaleTransform x:Name="OrbScaleTransform" ScaleX="0.88" ScaleY="0.88" />
@@ -301,7 +260,7 @@
                                 VerticalAlignment="Bottom"
                                 Panel.ZIndex="20"
                                 Visibility="Collapsed"
-                                Background="#A61F1418"
+                                Background="#AAFFFFFF"
                                 BorderBrush="#FFFF7B7B"
                                 BorderThickness="1"
                                 Cursor="Hand"
@@ -313,14 +272,15 @@
                                     CornerRadius="1" />
                         </Button>
 
-                        <Ellipse Margin="6"
-                                 Stroke="#25FFFFFF"
+                        <Ellipse x:Name="OrbInnerSurface"
+                                 Margin="6"
+                                 Stroke="#14000000"
                                  StrokeThickness="1">
                             <Ellipse.Fill>
                                 <RadialGradientBrush GradientOrigin="0.3,0.25">
-                                    <GradientStop Color="#FF172636" Offset="0" />
-                                    <GradientStop Color="#FF101B28" Offset="0.58" />
-                                    <GradientStop Color="#FF0B131E" Offset="1" />
+                                    <GradientStop Color="#FFFDFEFF" Offset="0" />
+                                    <GradientStop Color="#FFF5F7F9" Offset="0.58" />
+                                    <GradientStop Color="#FFE9EDF1" Offset="1" />
                                 </RadialGradientBrush>
                             </Ellipse.Fill>
                         </Ellipse>
@@ -334,15 +294,16 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <Border Grid.Row="0"
+                            <Border x:Name="StateBadge"
+                                    Grid.Row="0"
                                     MinWidth="64"
                                     Height="19"
                                     Margin="0,0,0,8"
                                     Padding="12,0"
                                     HorizontalAlignment="Center"
                                     CornerRadius="10"
-                                    Background="#66151E29"
-                                    BorderBrush="#2DFFFFFF"
+                                    Background="#D9FFFFFF"
+                                    BorderBrush="#18000000"
                                     BorderThickness="1">
                                 <TextBlock x:Name="StateText"
                                            HorizontalAlignment="Center"
@@ -357,7 +318,7 @@
                                        Margin="6,0,6,0"
                                        MaxWidth="84"
                                        VerticalAlignment="Center"
-                                       Foreground="#FFFFFFFF"
+                                       Foreground="#FF161B21"
                                        FontSize="10"
                                        FontFamily="Bahnschrift SemiBold"
                                        HorizontalAlignment="Center"
@@ -366,9 +327,10 @@
                                        TextWrapping="Wrap" />
 
                             <TextBlock Grid.Row="2"
+                                       x:Name="BrandText"
                                        Margin="0,8,0,0"
                                        HorizontalAlignment="Center"
-                                       Foreground="#7FD7EFFF"
+                                       Foreground="#FF6B727A"
                                        FontFamily="Bahnschrift"
                                        FontSize="9"
                                        Text="CURSIVIS" />
@@ -382,29 +344,31 @@
                                 <StackPanel Orientation="Horizontal"
                                             HorizontalAlignment="Center"
                                             Margin="0,0,0,18">
-                                    <Button Width="10"
+                                    <Button x:Name="ModePrevButton"
+                                            Width="10"
                                             Height="10"
                                             Margin="0,0,4,0"
                                             Padding="0"
-                                            Background="#00111B27"
+                                            Background="#00FFFFFF"
                                             BorderBrush="#00FFFFFF"
-                                            Foreground="#87E4F3FF"
+                                            Foreground="#FF7A818A"
                                             FontSize="8"
                                             Content="&lt;"
                                             Click="ModePrevButton_OnClick" />
                                     <TextBlock x:Name="ModeText"
                                                VerticalAlignment="Center"
-                                               Foreground="#FFF5FBFF"
+                                               Foreground="#FF1C2127"
                                                FontFamily="Bahnschrift SemiBold"
                                                FontSize="10"
                                                Text="Smart" />
-                                    <Button Width="10"
+                                    <Button x:Name="ModeNextButton"
+                                            Width="10"
                                             Height="10"
                                             Margin="4,0,0,0"
                                             Padding="0"
-                                            Background="#00111B27"
+                                            Background="#00FFFFFF"
                                             BorderBrush="#00FFFFFF"
-                                            Foreground="#87E4F3FF"
+                                            Foreground="#FF7A818A"
                                             FontSize="8"
                                             Content="&gt;"
                                             Click="ModeNextButton_OnClick" />
@@ -412,14 +376,15 @@
 
                                 <StackPanel Orientation="Horizontal"
                                             HorizontalAlignment="Center">
-                                    <Button Width="10"
+                                    <Button x:Name="CommandPrevButton"
+                                            Width="10"
                                             Height="10"
                                             Margin="0,0,4,0"
                                             Padding="0"
                                             VerticalAlignment="Center"
-                                            Background="#00111B27"
+                                            Background="#00FFFFFF"
                                             BorderBrush="#00FFFFFF"
-                                            Foreground="#A4D9FF"
+                                            Foreground="#FF7A818A"
                                             FontSize="8"
                                             Content="&lt;"
                                             Click="CommandPrevButton_OnClick" />
@@ -428,22 +393,23 @@
                                             Height="18"
                                             HorizontalAlignment="Center"
                                             Padding="0"
-                                            Background="#8814222F"
-                                            BorderBrush="#4CC4E6FF"
+                                            Background="#D9FFFFFF"
+                                            BorderBrush="#18000000"
                                             BorderThickness="1"
-                                            Foreground="White"
+                                            Foreground="#FF1B2026"
                                             FontFamily="Bahnschrift SemiBold"
                                             FontSize="8.5"
                                             Content="Trigger"
                                             Click="IdleRunButton_OnClick" />
-                                    <Button Width="10"
+                                    <Button x:Name="CommandNextButton"
+                                            Width="10"
                                             Height="10"
                                             Margin="4,0,0,0"
                                             Padding="0"
                                             VerticalAlignment="Center"
-                                            Background="#00111B27"
+                                            Background="#00FFFFFF"
                                             BorderBrush="#00FFFFFF"
-                                            Foreground="#A4D9FF"
+                                            Foreground="#FF7A818A"
                                             FontSize="8"
                                             Content="&gt;"
                                             Click="CommandNextButton_OnClick" />

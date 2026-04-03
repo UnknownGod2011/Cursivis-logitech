@@ -3,90 +3,141 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         AllowsTransparency="True"
         Background="Transparent"
-        Height="308"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Height="312"
         ShowInTaskbar="False"
         Topmost="True"
-        Width="540"
-        MinWidth="360"
-        MinHeight="220"
+        Width="612"
+        MinWidth="516"
+        MinHeight="232"
         WindowStyle="None">
     <Border x:Name="RootCard"
-            CornerRadius="22"
-            Background="#E509111A"
-            BorderBrush="#4CB6D7FF"
-            BorderThickness="1"
-            Padding="14">
+            CornerRadius="28"
+            Background="{DynamicResource Brush.ResultPanelShell}"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            Padding="12"
+            MouseLeftButtonDown="RootCard_OnMouseLeftButtonDown">
         <Border.RenderTransform>
             <TranslateTransform x:Name="PanelTranslateTransform" Y="14" />
         </Border.RenderTransform>
         <Border.Effect>
-            <DropShadowEffect BlurRadius="32"
+            <DropShadowEffect BlurRadius="24"
                               ShadowDepth="0"
-                              Color="#B3000000"
-                              Opacity="0.86" />
+                              Color="#66000000"
+                              Opacity="0.24" />
         </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Border x:Name="DragHeader"
                     Grid.Row="0"
-                    Cursor="SizeAll"
-                    Background="#69111B27"
-                    CornerRadius="16"
-                    Padding="12,10"
-                    MouseLeftButtonDown="DragHeader_OnMouseLeftButtonDown">
+                    Background="{DynamicResource Brush.ResultPanelHeader}"
+                    CornerRadius="18"
+                    Padding="12,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+
                     <TextBlock x:Name="TitleText"
                                Style="{StaticResource HeadlineTextStyle}"
-                               FontSize="18"
+                               FontSize="17"
+                               VerticalAlignment="Center"
                                Text="Cursivis" />
-                    <Border Grid.Column="1"
-                            Margin="10,0,0,0"
-                            Padding="10,5"
-                            CornerRadius="14"
-                            Background="#80111F2D"
-                            BorderBrush="#33F562E7"
-                            BorderThickness="1"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Center">
-                        <TextBlock x:Name="ActionText"
-                                   Style="{StaticResource HeadlineTextStyle}"
-                                   FontSize="11"
-                                   Foreground="#FFF0BEFF"
-                                   Text="Action: Summarize" />
-                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Right">
+                        <Button x:Name="UndoButton"
+                                MinWidth="50"
+                                Height="28"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource PanelToolbarButtonStyle}"
+                                Content="Undo"
+                                IsEnabled="False"
+                                Click="UndoButton_OnClick" />
+                        <Button x:Name="InsertButton"
+                                MinWidth="58"
+                                Height="28"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource PanelToolbarButtonStyle}"
+                                Content="Insert"
+                                Click="InsertButton_OnClick" />
+                        <Button x:Name="TakeActionButton"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource PanelToolbarButtonStyle}"
+                                MinWidth="86"
+                                Height="28"
+                                Content="Take Action"
+                                Click="TakeActionButton_OnClick" />
+                        <Button x:Name="MoreOptionsButton"
+                                MinWidth="88"
+                                Height="28"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource PanelToolbarButtonStyle}"
+                                Content="More Options"
+                                Click="MoreOptionsButton_OnClick" />
+                        <Button x:Name="ThemeToggleButton"
+                                Width="34"
+                                Margin="0,0,6,0"
+                                Style="{StaticResource PanelIconButtonStyle}"
+                                FontFamily="Segoe UI Symbol"
+                                Click="ThemeToggleButton_OnClick" />
+                        <Button x:Name="SettingsButton"
+                                Style="{StaticResource PanelIconButtonStyle}"
+                                FontFamily="Segoe MDL2 Assets"
+                                Content="&#xE713;"
+                                ToolTip="Settings"
+                                Click="SettingsButton_OnClick" />
+                    </StackPanel>
                 </Grid>
             </Border>
 
             <Border Grid.Row="1"
-                    Margin="0,10,0,10"
-                    CornerRadius="18"
-                    Background="#A50B131C"
-                    BorderBrush="#2CFFFFFF"
+                    Margin="0,8,0,0"
+                    CornerRadius="22"
+                    Background="{DynamicResource Brush.ResultPanelSurface}"
+                    BorderBrush="{DynamicResource Brush.ResultPanelSurfaceBorder}"
                     BorderThickness="1"
-                    Padding="12">
+                    Padding="12,10">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Style="{StaticResource SubtleTextStyle}"
-                               FontSize="10"
-                               Text="Output" />
+
+                    <StackPanel Grid.Row="0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   FontWeight="SemiBold"
+                                   Text="Output" />
+                        <TextBlock Margin="6,0,6,0"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="11"
+                                   Text="/" />
+                        <TextBlock x:Name="ActionText"
+                                   Style="{StaticResource SubtleTextStyle}"
+                                   FontSize="10.5"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.ResultMetaText}"
+                                   Text="System Status" />
+                    </StackPanel>
+
                     <RichTextBox x:Name="ResultDocumentBox"
                                  Grid.Row="1"
-                                 Margin="0,8,0,0"
+                                 Margin="0,7,0,0"
                                  Background="Transparent"
                                  BorderThickness="0"
-                                 Foreground="#FFF7FBFF"
+                                 Foreground="{DynamicResource Brush.TextMain}"
                                  Focusable="False"
                                  IsReadOnly="True"
                                  IsReadOnlyCaretVisible="False"
@@ -99,64 +150,6 @@
                     </RichTextBox>
                 </Grid>
             </Border>
-
-            <Grid Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Thumb Grid.Column="0"
-                       Width="16"
-                       Height="16"
-                       Margin="0,0,8,0"
-                       HorizontalAlignment="Left"
-                       VerticalAlignment="Bottom"
-                       Cursor="SizeNWSE"
-                       DragDelta="ResizeThumb_OnDragDelta">
-                    <Thumb.Template>
-                        <ControlTemplate TargetType="Thumb">
-                            <Grid Width="16" Height="16">
-                                <Path Stroke="#55FFFFFF"
-                                      StrokeThickness="1.1"
-                                      Data="M2,14 L14,2 M7,14 L14,7 M10,14 L14,10" />
-                            </Grid>
-                        </ControlTemplate>
-                    </Thumb.Template>
-                </Thumb>
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Right">
-                    <Button x:Name="TakeActionButton"
-                            Width="104"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource AccentButtonStyle}"
-                            Content="Take Action"
-                            Click="TakeActionButton_OnClick" />
-                    <Button x:Name="UndoButton"
-                            Width="68"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource MutedButtonStyle}"
-                            Content="Undo"
-                            IsEnabled="False"
-                            Click="UndoButton_OnClick" />
-                    <Button x:Name="InsertButton"
-                            Width="68"
-                            Height="32"
-                            Margin="0,0,6,0"
-                            Style="{StaticResource GlassButtonStyle}"
-                            Content="Insert"
-                            Click="InsertButton_OnClick" />
-                    <Button x:Name="MoreOptionsButton"
-                            Width="98"
-                            Height="32"
-                            Style="{StaticResource GlassButtonStyle}"
-                            Content="More Options"
-                            Click="MoreOptionsButton_OnClick" />
-                </StackPanel>
-            </Grid>
         </Grid>
     </Border>
 </Window>

@@ -1,9 +1,15 @@
 using Cursivis.Companion.Infrastructure;
+using Cursivis.Companion.Models;
+using Cursivis.Companion.Services;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
@@ -23,6 +29,7 @@ public partial class ResultPanelWindow : Window
     private static readonly Regex SubscriptRegex = new(@"(?<base>[A-Za-z0-9\)\]])_(?<sub>\{[^{}]+\}|[A-Za-z0-9+\-=().]+)", RegexOptions.Compiled);
     private static readonly Regex BoldRegex = new(@"\*\*(.+?)\*\*|__(.+?)__", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex InlineCodeRegex = new(@"`([^`]+)`", RegexOptions.Compiled);
+    private static readonly Regex RevealTokenRegex = new(@"\S+\s*|\n", RegexOptions.Compiled);
 
     private static readonly Dictionary<string, string> LatexTokenMap = new(StringComparer.Ordinal)
     {
@@ -113,11 +120,23 @@ public partial class ResultPanelWindow : Window
     private bool _isHiding;
     private int _hideAnimationVersion;
     private CancellationTokenSource? _revealCts;
+    private HwndSource? _hwndSource;
+    private CompanionThemeMode _themeMode = CompanionThemeService.CurrentMode;
 
     public ResultPanelWindow()
     {
         InitializeComponent();
-        UiPresentation.ApplyShinyText(ActionText, ColorFromHex("#E4B4FF"), ColorFromHex("#FFFFFF"), 2.6);
+        CompanionThemeService.ThemeChanged += CompanionThemeServiceOnThemeChanged;
+        SourceInitialized += ResultPanelWindow_OnSourceInitialized;
+        Closed += (_, _) =>
+        {
+            CompanionThemeService.ThemeChanged -= CompanionThemeServiceOnThemeChanged;
+            if (_hwndSource is not null)
+            {
+                _hwndSource.RemoveHook(WndProc);
+                _hwndSource = null;
+            }
+        };
         Deactivated += (_, _) =>
         {
             if (IsVisible)
@@ -125,13 +144,18 @@ public partial class ResultPanelWindow : Window
                 HidePanel();
             }
         };
+        ApplyThemePresentation(_themeMode);
     }
 
     public event EventHandler? InsertRequested;
 
     public event EventHandler? MoreOptionsRequested;
 
+    public event EventHandler? SettingsRequested;
+
     public event EventHandler? TakeActionRequested;
+
+    public event EventHandler<CompanionThemeMode>? ThemeToggleRequested;
 
     public event EventHandler? UndoRequested;
 
@@ -141,7 +165,7 @@ public partial class ResultPanelWindow : Window
     {
         LastResult = output;
         TitleText.Text = "Cursivis";
-        ActionText.Text = $"Action: {action}";
+        ActionText.Text = action;
         TakeActionButton.IsEnabled = true;
         TakeActionButton.Visibility = Visibility.Visible;
 
@@ -159,9 +183,9 @@ public partial class ResultPanelWindow : Window
     {
         LastResult = text;
         TitleText.Text = "Cursivis";
-        ActionText.Text = allowTakeAction ? "Action: Take Action Status" : "Action: System Status";
+        ActionText.Text = allowTakeAction ? "Take Action Status" : "System Status";
         TakeActionButton.IsEnabled = allowTakeAction;
-        TakeActionButton.Visibility = allowTakeAction ? Visibility.Visible : Visibility.Collapsed;
+        TakeActionButton.Visibility = Visibility.Visible;
 
         PositionPanel(cursor);
         EnsureShown();
@@ -244,9 +268,23 @@ public partial class ResultPanelWindow : Window
         MoreOptionsRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    private void SettingsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     private void TakeActionButton_OnClick(object sender, RoutedEventArgs e)
     {
         TakeActionRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ThemeToggleButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var nextMode = _themeMode == CompanionThemeMode.Dark
+            ? CompanionThemeMode.Light
+            : CompanionThemeMode.Dark;
+
+        ThemeToggleRequested?.Invoke(this, nextMode);
     }
 
     private void UndoButton_OnClick(object sender, RoutedEventArgs e)
@@ -273,9 +311,22 @@ public partial class ResultPanelWindow : Window
         Top = Math.Max(workArea.Top + 8, Math.Min(Top, workArea.Bottom - Height - 8));
     }
 
-    private void DragHeader_OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void RootCard_OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is DependencyObject source &&
+            (FindParent<ButtonBase>(source) is not null ||
+             FindParent<ScrollBar>(source) is not null ||
+             FindParent<Thumb>(source) is not null))
+        {
+            return;
+        }
+
+        if (IsInResizeZone(e.GetPosition(this)))
         {
             return;
         }
@@ -331,12 +382,78 @@ public partial class ResultPanelWindow : Window
         _revealCts?.Dispose();
         _revealCts = new CancellationTokenSource();
         var cancellationToken = _revealCts.Token;
+        var normalizedBody = NormalizeNewlines(body);
 
         try
         {
+            if (string.IsNullOrWhiteSpace(normalizedBody))
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    ResultDocumentBox.Document = BuildDocument(string.Empty);
+                    ResultDocumentBox.CaretPosition = ResultDocumentBox.Document.ContentStart;
+                    ResultDocumentBox.ScrollToHome();
+                });
+                return;
+            }
+
+            var revealTokens = RevealTokenRegex.Matches(normalizedBody)
+                .Select(match => match.Value)
+                .ToList();
+
+            if (revealTokens.Count == 0)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    ResultDocumentBox.Document = BuildDocument(normalizedBody);
+                    ResultDocumentBox.CaretPosition = ResultDocumentBox.Document.ContentStart;
+                    ResultDocumentBox.ScrollToHome();
+                });
+                return;
+            }
+
+            var step = revealTokens.Count switch
+            {
+                > 320 => 4,
+                > 200 => 3,
+                > 110 => 2,
+                _ => 1
+            };
+            var delay = revealTokens.Count switch
+            {
+                > 320 => 12,
+                > 200 => 14,
+                > 110 => 17,
+                _ => 20
+            };
+            var builder = new StringBuilder(normalizedBody.Length);
+
+            for (var index = 0; index < revealTokens.Count; index += step)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var upperBound = Math.Min(index + step, revealTokens.Count);
+                for (var tokenIndex = index; tokenIndex < upperBound; tokenIndex += 1)
+                {
+                    builder.Append(revealTokens[tokenIndex]);
+                }
+
+                var snapshot = builder.ToString();
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    ResultDocumentBox.Document = BuildDocument(snapshot);
+                    ResultDocumentBox.CaretPosition = ResultDocumentBox.Document.ContentStart;
+                });
+
+                if (upperBound < revealTokens.Count)
+                {
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+
             await Dispatcher.InvokeAsync(() =>
             {
-                ResultDocumentBox.Document = BuildDocument(body);
+                ResultDocumentBox.Document = BuildDocument(normalizedBody);
                 ResultDocumentBox.CaretPosition = ResultDocumentBox.Document.ContentStart;
                 ResultDocumentBox.ScrollToHome();
             });
@@ -345,22 +462,18 @@ public partial class ResultPanelWindow : Window
         {
             // No-op.
         }
-        finally
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-        }
     }
 
-    private static FlowDocument BuildDocument(string body)
+    private FlowDocument BuildDocument(string body)
     {
         var document = new FlowDocument
         {
             PagePadding = new Thickness(0),
             Background = Brushes.Transparent,
-            Foreground = new SolidColorBrush(ColorFromHex("#FFF7FBFF")),
-            FontFamily = new FontFamily("Bahnschrift"),
+            Foreground = FindBrush("Brush.TextMain", "#FFF7FBFF"),
+            FontFamily = new FontFamily("Segoe UI Variable Text, Segoe UI"),
             FontSize = 13,
-            LineHeight = 21,
+            LineHeight = 19,
             TextAlignment = TextAlignment.Left
         };
 
@@ -395,7 +508,7 @@ public partial class ResultPanelWindow : Window
         return document;
     }
 
-    private static Paragraph BuildParagraph(string line)
+    private Paragraph BuildParagraph(string line)
     {
         var paragraph = new Paragraph
         {
@@ -408,8 +521,9 @@ public partial class ResultPanelWindow : Window
             var level = headingMatch.Groups[1].Value.Length;
             var headingText = CleanInlineMarkdown(headingMatch.Groups[2].Value);
             paragraph.Inlines.Add(new Bold(new Run(headingText)));
-            paragraph.FontSize = Math.Max(14, 18 - level);
-            paragraph.Foreground = new SolidColorBrush(ColorFromHex("#FFF6D6FF"));
+            paragraph.FontFamily = new FontFamily("Segoe UI Variable Display Semibold, Segoe UI Semibold");
+            paragraph.FontSize = Math.Max(14, 19 - level);
+            paragraph.Foreground = FindBrush("Brush.ResultHeadingText", "#FFF4F6F8");
             return paragraph;
         }
 
@@ -418,7 +532,7 @@ public partial class ResultPanelWindow : Window
         {
             paragraph.Inlines.Add(new Run("\u2022 ")
             {
-                Foreground = new SolidColorBrush(ColorFromHex("#FFE4B7FF")),
+                Foreground = FindBrush("Brush.ResultBulletText", "#FFD4D9DF"),
                 FontWeight = FontWeights.SemiBold
             });
             AppendFormattedInlines(paragraph.Inlines, bulletMatch.Groups[1].Value);
@@ -431,7 +545,7 @@ public partial class ResultPanelWindow : Window
             var prefix = line[..(line.IndexOf('.', StringComparison.Ordinal) + 1)] + " ";
             paragraph.Inlines.Add(new Run(prefix)
             {
-                Foreground = new SolidColorBrush(ColorFromHex("#FFE4B7FF")),
+                Foreground = FindBrush("Brush.ResultBulletText", "#FFD4D9DF"),
                 FontWeight = FontWeights.SemiBold
             });
             AppendFormattedInlines(paragraph.Inlines, numberedMatch.Groups[1].Value);
@@ -440,7 +554,7 @@ public partial class ResultPanelWindow : Window
 
         if (LooksLikeMathLine(line))
         {
-            paragraph.Background = new SolidColorBrush(Color.FromArgb(52, 64, 116, 142));
+            paragraph.Background = FindBrush("Brush.ResultMathBackground", "#2E3D4B5B");
             paragraph.Padding = new Thickness(8, 4, 8, 4);
             paragraph.Margin = new Thickness(0, 2, 0, 8);
             AppendMathInline(paragraph.Inlines, line);
@@ -451,7 +565,7 @@ public partial class ResultPanelWindow : Window
         return paragraph;
     }
 
-    private static void AppendFormattedInlines(InlineCollection inlines, string text)
+    private void AppendFormattedInlines(InlineCollection inlines, string text)
     {
         var index = 0;
         while (index < text.Length)
@@ -480,8 +594,8 @@ public partial class ResultPanelWindow : Window
                     var codeSpan = new Span(new Run(codeContent))
                     {
                         FontFamily = new FontFamily("Consolas"),
-                        Background = new SolidColorBrush(Color.FromArgb(70, 29, 40, 52)),
-                        Foreground = new SolidColorBrush(ColorFromHex("#FFD9F2FF"))
+                        Background = FindBrush("Brush.ResultCodeBackground", "#26161A1F"),
+                        Foreground = FindBrush("Brush.ResultCodeForeground", "#FFE7ECF2")
                     };
                     inlines.Add(codeSpan);
                     index = nextToken.NextIndex;
@@ -498,13 +612,13 @@ public partial class ResultPanelWindow : Window
         }
     }
 
-    private static void AppendMathInline(InlineCollection inlines, string mathContent)
+    private void AppendMathInline(InlineCollection inlines, string mathContent)
     {
         var mathSpan = new Span(new Run(NormalizeLatexPlain(mathContent)))
         {
             FontFamily = new FontFamily("Cambria Math"),
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(ColorFromHex("#FFF3D7FF"))
+            Foreground = FindBrush("Brush.ResultMathForeground", "#FFE6EAF0")
         };
         inlines.Add(mathSpan);
     }
@@ -639,15 +753,201 @@ public partial class ResultPanelWindow : Window
         return best;
     }
 
+    private Brush FindBrush(string resourceKey, string fallbackHex)
+    {
+        if (TryFindResource(resourceKey) is Brush brush)
+        {
+            return brush;
+        }
+
+        return new SolidColorBrush(ColorFromHex(fallbackHex));
+    }
+
+    private void CompanionThemeServiceOnThemeChanged(object? sender, Models.CompanionThemeMode e)
+    {
+        _themeMode = e;
+        ApplyThemePresentation(e);
+
+        if (!IsLoaded || string.IsNullOrWhiteSpace(LastResult))
+        {
+            return;
+        }
+
+        void RefreshDocument()
+        {
+            ResultDocumentBox.Document = BuildDocument(LastResult);
+            ResultDocumentBox.CaretPosition = ResultDocumentBox.Document.ContentStart;
+            ResultDocumentBox.ScrollToHome();
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            RefreshDocument();
+            return;
+        }
+
+        Dispatcher.Invoke(RefreshDocument);
+    }
+
+    private void ApplyThemePresentation(CompanionThemeMode themeMode)
+    {
+        var baseColor = themeMode == CompanionThemeMode.Dark
+            ? ColorFromHex("#FFC9D0D8")
+            : ColorFromHex("#FF5A6067");
+        var shineColor = themeMode == CompanionThemeMode.Dark
+            ? ColorFromHex("#FFFFFFFF")
+            : ColorFromHex("#FFD5DAE0");
+
+        UiPresentation.ApplyShinyText(
+            TitleText,
+            baseColor,
+            shineColor,
+            themeMode == CompanionThemeMode.Dark ? 2.65 : 3.35,
+            themeMode == CompanionThemeMode.Dark ? 0.94 : 0.32,
+            themeMode == CompanionThemeMode.Dark ? 1.08 : 1.04);
+        ThemeToggleButton.Content = themeMode == CompanionThemeMode.Dark ? "☼" : "☾";
+        ThemeToggleButton.ToolTip = themeMode == CompanionThemeMode.Dark
+            ? "Switch to light mode"
+            : "Switch to dark mode";
+        ThemeToggleButton.Content = themeMode == CompanionThemeMode.Dark ? "\u2600" : "\u263E";
+        SettingsButton.Content = "\uE713";
+        SettingsButton.ToolTip = "Settings";
+        ApplyHeaderButtonChrome(themeMode);
+    }
+
+    private void ApplyHeaderButtonChrome(CompanionThemeMode themeMode)
+    {
+        if (themeMode == CompanionThemeMode.Dark)
+        {
+            var pillBackground = CreateBrush("#F0101317");
+            var iconBackground = CreateBrush("#EC0D1014");
+            var borderBrush = CreateBrush("#24FFFFFF");
+            var foreground = CreateBrush("#FFF5F7FA");
+
+            ApplyButtonChrome(UndoButton, pillBackground, borderBrush, foreground);
+            ApplyButtonChrome(InsertButton, pillBackground, borderBrush, foreground);
+            ApplyButtonChrome(TakeActionButton, pillBackground, borderBrush, foreground);
+            ApplyButtonChrome(MoreOptionsButton, pillBackground, borderBrush, foreground);
+            ApplyButtonChrome(ThemeToggleButton, iconBackground, borderBrush, foreground);
+            ApplyButtonChrome(SettingsButton, iconBackground, borderBrush, foreground);
+            return;
+        }
+
+        ClearButtonChrome(UndoButton);
+        ClearButtonChrome(InsertButton);
+        ClearButtonChrome(TakeActionButton);
+        ClearButtonChrome(MoreOptionsButton);
+        ClearButtonChrome(ThemeToggleButton);
+        ClearButtonChrome(SettingsButton);
+    }
+
+    private static void ApplyButtonChrome(ButtonBase button, Brush background, Brush borderBrush, Brush foreground)
+    {
+        button.SetCurrentValue(Control.BackgroundProperty, background);
+        button.SetCurrentValue(Control.BorderBrushProperty, borderBrush);
+        button.SetCurrentValue(Control.ForegroundProperty, foreground);
+    }
+
+    private static void ClearButtonChrome(ButtonBase button)
+    {
+        button.ClearValue(Control.BackgroundProperty);
+        button.ClearValue(Control.BorderBrushProperty);
+        button.ClearValue(Control.ForegroundProperty);
+    }
+
+    private static SolidColorBrush CreateBrush(string hex)
+    {
+        var brush = new SolidColorBrush(ColorFromHex(hex));
+        brush.Freeze();
+        return brush;
+    }
+
+    private void ResultPanelWindow_OnSourceInitialized(object? sender, EventArgs e)
+    {
+        _hwndSource = PresentationSource.FromVisual(this) as HwndSource;
+        _hwndSource?.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int wmNchittest = 0x0084;
+        if (msg != wmNchittest || WindowState != WindowState.Normal)
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+        return (IntPtr)HitTestResize(lParam);
+    }
+
+    private int HitTestResize(IntPtr lParam)
+    {
+        const int htClient = 1;
+        const int htLeft = 10;
+        const int htRight = 11;
+        const int htTop = 12;
+        const int htTopLeft = 13;
+        const int htTopRight = 14;
+        const int htBottom = 15;
+        const int htBottomLeft = 16;
+        const int htBottomRight = 17;
+
+        var mouseScreen = GetScreenPoint(lParam);
+        var point = PointFromScreen(mouseScreen);
+        var frame = 14d;
+
+        var onLeft = point.X <= frame;
+        var onRight = point.X >= ActualWidth - frame;
+        var onTop = point.Y <= frame;
+        var onBottom = point.Y >= ActualHeight - frame;
+
+        if (onTop && onLeft) return htTopLeft;
+        if (onTop && onRight) return htTopRight;
+        if (onBottom && onLeft) return htBottomLeft;
+        if (onBottom && onRight) return htBottomRight;
+        if (onLeft) return htLeft;
+        if (onRight) return htRight;
+        if (onTop) return htTop;
+        if (onBottom) return htBottom;
+        return htClient;
+    }
+
+    private bool IsInResizeZone(Point point)
+    {
+        const double frame = 14;
+        return point.X <= frame ||
+               point.X >= ActualWidth - frame ||
+               point.Y <= frame ||
+               point.Y >= ActualHeight - frame;
+    }
+
+    private static Point GetScreenPoint(IntPtr lParam)
+    {
+        var value = lParam.ToInt64();
+        var x = unchecked((short)(value & 0xFFFF));
+        var y = unchecked((short)((value >> 16) & 0xFFFF));
+        return new Point(x, y);
+    }
+
+    private static T? FindParent<T>(DependencyObject? source) where T : DependencyObject
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is T match)
+            {
+                return match;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
     private static Color ColorFromHex(string value)
     {
         return (Color)ColorConverter.ConvertFromString(value);
-    }
-
-    private void ResizeThumb_OnDragDelta(object sender, DragDeltaEventArgs e)
-    {
-        Width = Math.Max(MinWidth, Width + e.HorizontalChange);
-        Height = Math.Max(MinHeight, Height + e.VerticalChange);
     }
 
     private enum TokenKind

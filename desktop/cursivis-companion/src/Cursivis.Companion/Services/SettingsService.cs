@@ -44,15 +44,18 @@ public sealed class SettingsService
         var takeActionPreference = Enum.TryParse<TakeActionPromptPreference>(settings.TakeActionPromptPreference, true, out var parsedPreference)
             ? parsedPreference
             : TakeActionPromptPreference.AlwaysAskToRun;
+        var themeMode = Enum.TryParse<CompanionThemeMode>(settings.ThemeMode, true, out var parsedThemeMode)
+            ? parsedThemeMode
+            : CompanionThemeMode.Dark;
 
         var showOrbDuringWorkflow = settings.ShowOrbDuringWorkflow ?? true;
-        return new CompanionSettings(mode, showOrbDuringWorkflow, takeActionPreference);
+        return new CompanionSettings(mode, showOrbDuringWorkflow, takeActionPreference, themeMode);
     }
 
     public async Task SaveModeAsync(InteractionMode mode)
     {
         var settings = await TryLoadSettingsAsync()
-            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark);
 
         await SaveSettingsAsync(settings with { Mode = mode });
     }
@@ -60,7 +63,7 @@ public sealed class SettingsService
     public async Task SaveShowOrbDuringWorkflowAsync(bool showOrbDuringWorkflow)
     {
         var settings = await TryLoadSettingsAsync()
-            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark);
 
         await SaveSettingsAsync(settings with { ShowOrbDuringWorkflow = showOrbDuringWorkflow });
     }
@@ -68,9 +71,17 @@ public sealed class SettingsService
     public async Task SaveTakeActionPromptPreferenceAsync(TakeActionPromptPreference preference)
     {
         var settings = await TryLoadSettingsAsync()
-            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun);
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark);
 
         await SaveSettingsAsync(settings with { TakeActionPromptPreference = preference });
+    }
+
+    public async Task SaveThemeModeAsync(CompanionThemeMode themeMode)
+    {
+        var settings = await TryLoadSettingsAsync()
+            ?? new CompanionSettings(InteractionMode.Smart, ShowOrbDuringWorkflow: true, TakeActionPromptPreference.AlwaysAskToRun, CompanionThemeMode.Dark);
+
+        await SaveSettingsAsync(settings with { ThemeMode = themeMode });
     }
 
     public async Task SaveSettingsAsync(CompanionSettings settings)
@@ -78,10 +89,11 @@ public sealed class SettingsService
         Directory.CreateDirectory(_settingsDir);
         var payload = new SettingsData
         {
-            Mode = settings.Mode.ToString(),
-            ShowOrbDuringWorkflow = settings.ShowOrbDuringWorkflow,
-            TakeActionPromptPreference = settings.TakeActionPromptPreference.ToString()
-        };
+                Mode = settings.Mode.ToString(),
+                ShowOrbDuringWorkflow = settings.ShowOrbDuringWorkflow,
+                TakeActionPromptPreference = settings.TakeActionPromptPreference.ToString(),
+                ThemeMode = settings.ThemeMode.ToString()
+            };
         var json = JsonSerializer.Serialize(payload, _jsonOptions);
         await File.WriteAllTextAsync(_settingsPath, json);
     }
@@ -93,5 +105,7 @@ public sealed class SettingsService
         public bool? ShowOrbDuringWorkflow { get; set; }
 
         public string TakeActionPromptPreference { get; set; } = Models.TakeActionPromptPreference.AlwaysAskToRun.ToString();
+
+        public string ThemeMode { get; set; } = Models.CompanionThemeMode.Dark.ToString();
     }
 }

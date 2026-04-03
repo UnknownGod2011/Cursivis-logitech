@@ -1,9 +1,11 @@
 using Cursivis.Companion.Infrastructure;
 using Cursivis.Companion.Models;
+using Cursivis.Companion.Services;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
@@ -30,6 +32,7 @@ public partial class OrbOverlayWindow : Window
     private int _idleCommandIndex;
     private List<string> _menuOptions = [];
     private int _selectedMenuIndex;
+    private CompanionThemeMode _themeMode = CompanionThemeService.CurrentMode;
 
     public OrbOverlayWindow()
     {
@@ -92,11 +95,14 @@ public partial class OrbOverlayWindow : Window
             }
         };
 
-        UiPresentation.ApplyShinyText(StatusText, ColorFromHex("#AFC6DA"), Colors.White, 2.4);
+        CompanionThemeService.ThemeChanged += CompanionThemeServiceOnThemeChanged;
+        UiPresentation.ApplyShinyText(StatusText, ColorFromHex("#D0D6DD"), Colors.White, 2.6, 0.48, 1.1);
         ResetListeningLevelVisual();
         ApplyPalette(OrbState.Idle);
+        ApplyThemeChrome();
         UpdateIdleTexts();
         UpdatePresentationMode();
+        Closed += (_, _) => CompanionThemeService.ThemeChanged -= CompanionThemeServiceOnThemeChanged;
     }
 
     public event EventHandler<string>? MenuOptionSelected;
@@ -208,7 +214,7 @@ public partial class OrbOverlayWindow : Window
         }
 
         var clamped = Math.Clamp(level, 0, 1);
-        VoiceGlowHalo.Opacity = 0.18 + (clamped * 0.28);
+        VoiceGlowHalo.Opacity = 0;
         VoiceGlowScaleTransform.ScaleX = 0.98 + (clamped * 0.16);
         VoiceGlowScaleTransform.ScaleY = 0.98 + (clamped * 0.16);
     }
@@ -216,6 +222,7 @@ public partial class OrbOverlayWindow : Window
     public void UpdateActionRing(IReadOnlyList<string> actions, int selectedIndex)
     {
         var visibleEntries = BuildVisibleEntries(actions, selectedIndex);
+        var isDark = _themeMode == CompanionThemeMode.Dark;
 
         for (var i = 0; i < _actionChips.Length; i++)
         {
@@ -232,14 +239,18 @@ public partial class OrbOverlayWindow : Window
 
             var isSelected = entry.ActualIndex == selectedIndex;
             _actionChips[i].Background = isSelected
-                ? CreateChipBrush(ColorFromHex("#7F0D2039"), ColorFromHex("#D03A1A5B"), ColorFromHex("#D01D4E64"))
-                : CreateChipBrush(ColorFromHex("#8A0D1620"), ColorFromHex("#7A111F2D"), ColorFromHex("#7A0E1822"));
+                ? isDark
+                    ? CreateChipBrush(Color.FromArgb(214, 19, 23, 28), Color.FromArgb(196, 28, 33, 39), Color.FromArgb(214, 17, 21, 25))
+                    : CreateChipBrush(Color.FromArgb(240, 255, 255, 255), Color.FromArgb(228, 245, 246, 247), Color.FromArgb(240, 255, 255, 255))
+                : isDark
+                    ? CreateChipBrush(Color.FromArgb(168, 17, 21, 26), Color.FromArgb(148, 20, 24, 29), Color.FromArgb(168, 15, 19, 24))
+                    : CreateChipBrush(Color.FromArgb(225, 255, 255, 255), Color.FromArgb(214, 244, 245, 246), Color.FromArgb(225, 255, 255, 255));
             _actionChips[i].BorderBrush = isSelected
-                ? new SolidColorBrush(ColorFromHex("#FFD4EAFF"))
-                : new SolidColorBrush(Color.FromArgb(72, 255, 255, 255));
+                ? new SolidColorBrush(isDark ? ColorFromHex("#FFF5F7FA") : ColorFromHex("#FF1A1F24"))
+                : new SolidColorBrush(isDark ? Color.FromArgb(72, 255, 255, 255) : Color.FromArgb(34, 32, 32, 32));
             _actionTexts[i].Foreground = isSelected
-                ? new SolidColorBrush(Colors.White)
-                : new SolidColorBrush(ColorFromHex("#E4F3FF"));
+                ? new SolidColorBrush(isDark ? Colors.White : ColorFromHex("#FF12161A"))
+                : new SolidColorBrush(isDark ? ColorFromHex("#FFD9DEE4") : ColorFromHex("#FF525861"));
         }
     }
 
@@ -466,9 +477,13 @@ public partial class OrbOverlayWindow : Window
 
         UiPresentation.ApplyShinyText(
             StatusText,
-            isListening ? ColorFromHex("#F0C0D9") : ColorFromHex("#AFC6DA"),
-            Colors.White,
-            isListening ? 1.6 : 2.2);
+            _themeMode == CompanionThemeMode.Dark
+                ? (isListening ? ColorFromHex("#FFF5F7FA") : ColorFromHex("#FFC0C8D0"))
+                : (isListening ? ColorFromHex("#FF2A3036") : ColorFromHex("#FF5F666E")),
+            _themeMode == CompanionThemeMode.Dark ? Colors.White : ColorFromHex("#FFB9C0C8"),
+            isListening ? 2.0 : 2.35,
+            _themeMode == CompanionThemeMode.Dark ? 0.64 : 0.28,
+            _themeMode == CompanionThemeMode.Dark ? 1.1 : 1.03);
         _pulseStoryboard.Begin();
         StartOrbitRotation(isListening ? 4.0 : 7.5);
     }
@@ -479,8 +494,8 @@ public partial class OrbOverlayWindow : Window
         _rotationStoryboard?.Stop();
         GlowScaleTransform.ScaleX = 1;
         GlowScaleTransform.ScaleY = 1;
-        GlowHalo.Opacity = 0.84;
-        UiPresentation.SetFlatText(StatusText, Colors.White);
+        GlowHalo.Opacity = 0;
+        UiPresentation.SetFlatText(StatusText, _themeMode == CompanionThemeMode.Dark ? Colors.White : ColorFromHex("#FF2A3037"));
     }
 
     private void ResetListeningLevelVisual()
@@ -501,9 +516,9 @@ public partial class OrbOverlayWindow : Window
         var showCompact = _currentState == OrbState.Idle && !_isActionRingVisible && !_isMenuMode;
         CompactIdlePanel.Visibility = showCompact ? Visibility.Visible : Visibility.Collapsed;
         ExpandedStatePanel.Visibility = showCompact ? Visibility.Collapsed : Visibility.Visible;
-        IdleGlowHalo.Visibility = showCompact ? Visibility.Visible : Visibility.Collapsed;
-        GlowHalo.Visibility = showCompact ? Visibility.Collapsed : Visibility.Visible;
-        OrbitRingCanvas.Visibility = showCompact ? Visibility.Collapsed : Visibility.Visible;
+        IdleGlowHalo.Visibility = Visibility.Collapsed;
+        GlowHalo.Visibility = Visibility.Collapsed;
+        OrbitRingCanvas.Visibility = Visibility.Collapsed;
         AnimateBaseScale(showCompact ? 0.88 : 1.0);
     }
 
@@ -674,29 +689,45 @@ public partial class OrbOverlayWindow : Window
 
     private void ApplyPalette(OrbState state)
     {
+        var isDark = _themeMode == CompanionThemeMode.Dark;
+        OrbCore.BorderBrush = new SolidColorBrush(isDark ? ColorFromHex("#60FFFFFF") : ColorFromHex("#14000000"));
+
         switch (state)
         {
             case OrbState.Processing:
-                OrbCore.Background = CreateOrbBrush(ColorFromHex("#16283A"), ColorFromHex("#122133"), ColorFromHex("#0C1621"));
-                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#C255E5FF"), ColorFromHex("#48F562E7"), ColorFromHex("#0854A8FF"));
-                StateText.Foreground = new SolidColorBrush(ColorFromHex("#D6E9FF"));
+                OrbCore.Background = isDark
+                    ? CreateOrbBrush(Color.FromArgb(222, 24, 28, 33), Color.FromArgb(206, 17, 21, 25), Color.FromArgb(188, 10, 13, 17))
+                    : CreateOrbBrush(Color.FromArgb(238, 255, 255, 255), Color.FromArgb(232, 252, 253, 254), Color.FromArgb(224, 245, 247, 249));
+                StateText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFF5F7FA") : ColorFromHex("#FF2C3137"));
                 break;
             case OrbState.Listening:
-                OrbCore.Background = CreateOrbBrush(ColorFromHex("#331A38"), ColorFromHex("#251629"), ColorFromHex("#140E1A"));
-                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#5DAAD5F3"), ColorFromHex("#2A78B4D8"), ColorFromHex("#04243A4A"));
-                StateText.Foreground = new SolidColorBrush(ColorFromHex("#FFD6F8"));
+                OrbCore.Background = isDark
+                    ? CreateOrbBrush(Color.FromArgb(224, 28, 32, 37), Color.FromArgb(210, 19, 23, 28), Color.FromArgb(194, 12, 16, 21))
+                    : CreateOrbBrush(Color.FromArgb(240, 255, 255, 255), Color.FromArgb(234, 252, 253, 254), Color.FromArgb(226, 246, 248, 250));
+                StateText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFFFFFFF") : ColorFromHex("#FF252A31"));
                 break;
             case OrbState.Completed:
-                OrbCore.Background = CreateOrbBrush(ColorFromHex("#173A29"), ColorFromHex("#113021"), ColorFromHex("#0B1812"));
-                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#E4FFD36A"), ColorFromHex("#685EEBFF"), ColorFromHex("#083B5A64"));
-                StateText.Foreground = new SolidColorBrush(ColorFromHex("#FFF5D5"));
+                OrbCore.Background = isDark
+                    ? CreateOrbBrush(Color.FromArgb(222, 26, 30, 35), Color.FromArgb(208, 18, 22, 27), Color.FromArgb(192, 11, 15, 19))
+                    : CreateOrbBrush(Color.FromArgb(239, 255, 255, 255), Color.FromArgb(233, 252, 253, 254), Color.FromArgb(225, 246, 248, 250));
+                StateText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFFFFFFF") : ColorFromHex("#FF20242A"));
                 break;
             default:
-                OrbCore.Background = CreateOrbBrush(ColorFromHex("#172636"), ColorFromHex("#101B28"), ColorFromHex("#0B131E"));
-                GlowHalo.Fill = CreateGlowBrush(ColorFromHex("#AAF562E7"), ColorFromHex("#885EEBFF"), ColorFromHex("#1065A7FF"));
-                StateText.Foreground = new SolidColorBrush(ColorFromHex("#F0F7FF"));
+                OrbCore.Background = isDark
+                    ? CreateOrbBrush(Color.FromArgb(220, 22, 26, 31), Color.FromArgb(204, 15, 19, 23), Color.FromArgb(188, 9, 13, 17))
+                    : CreateOrbBrush(Color.FromArgb(236, 255, 255, 255), Color.FromArgb(230, 251, 252, 254), Color.FromArgb(222, 244, 246, 249));
+                StateText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFF3F5F8") : ColorFromHex("#FF3C4250"));
                 break;
         }
+
+        OrbInnerSurface.Fill = isDark
+            ? CreateOrbBrush(Color.FromArgb(246, 20, 29, 40), Color.FromArgb(238, 14, 21, 31), Color.FromArgb(230, 9, 14, 22))
+            : CreateOrbBrush(Color.FromArgb(252, 255, 255, 255), Color.FromArgb(246, 252, 253, 254), Color.FromArgb(238, 245, 247, 250));
+        OrbInnerSurface.Stroke = new SolidColorBrush(isDark ? Color.FromArgb(34, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0));
+        StateBadge.Background = new SolidColorBrush(isDark ? Color.FromArgb(88, 20, 27, 35) : Color.FromArgb(232, 255, 255, 255));
+        StateBadge.BorderBrush = new SolidColorBrush(isDark ? Color.FromArgb(45, 255, 255, 255) : Color.FromArgb(16, 0, 0, 0));
+
+        ApplyThemeChrome();
     }
 
     private void StartOrbitRotation(double secondsPerRotation)
@@ -729,7 +760,7 @@ public partial class OrbOverlayWindow : Window
         {
             var ring = _magicRings[i];
             ring.Opacity = 0;
-            ring.Stroke = new SolidColorBrush(i % 2 == 0 ? ColorFromHex("#FFF562E7") : ColorFromHex("#FF5EEBFF"));
+            ring.Stroke = new SolidColorBrush(i % 2 == 0 ? ColorFromHex("#FFF5F7FA") : ColorFromHex("#FFB6BEC6"));
 
             if (ring.RenderTransform is not ScaleTransform scaleTransform)
             {
@@ -849,5 +880,44 @@ public partial class OrbOverlayWindow : Window
     private static Color ColorFromHex(string value)
     {
         return (Color)ColorConverter.ConvertFromString(value);
+    }
+
+    private void CompanionThemeServiceOnThemeChanged(object? sender, CompanionThemeMode themeMode)
+    {
+        _themeMode = themeMode;
+        ApplyPalette(_currentState);
+        if (_isMenuMode && _menuOptions.Count > 0)
+        {
+            UpdateActionRing(_menuOptions, _selectedMenuIndex);
+        }
+    }
+
+    private void ApplyThemeChrome()
+    {
+        var isDark = _themeMode == CompanionThemeMode.Dark;
+
+        if (VoiceGlowHalo.Stroke is SolidColorBrush voiceStroke)
+        {
+            voiceStroke.Color = Colors.Transparent;
+        }
+
+        ModeText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFF5F7FA") : ColorFromHex("#FF343A46"));
+        BrandText.Foreground = new SolidColorBrush(isDark ? ColorFromHex("#FFB7BFC8") : ColorFromHex("#FF6B727A"));
+        IdleRunButton.Background = new SolidColorBrush(isDark ? Color.FromArgb(108, 24, 29, 35) : Color.FromArgb(206, 255, 255, 255));
+        IdleRunButton.BorderBrush = new SolidColorBrush(isDark ? ColorFromHex("#2EFFFFFF") : ColorFromHex("#18000000"));
+        IdleRunButton.Foreground = new SolidColorBrush(isDark ? Colors.White : ColorFromHex("#FF22272D"));
+        UiPresentation.SetFlatText(StatusText, isDark ? Colors.White : ColorFromHex("#FF2A3037"));
+
+        if (OrbCore.Effect is DropShadowEffect orbShadow)
+        {
+            orbShadow.Color = isDark ? ColorFromHex("#CC08131F") : ColorFromHex("#33000000");
+            orbShadow.Opacity = isDark ? 0.18 : 0.05;
+        }
+
+        var navForeground = new SolidColorBrush(isDark ? ColorFromHex("#FFD8DDE3") : ColorFromHex("#FF626973"));
+        foreach (var button in new[] { ModePrevButton, ModeNextButton, CommandPrevButton, CommandNextButton })
+        {
+            button.Foreground = navForeground;
+        }
     }
 }
